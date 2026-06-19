@@ -46,3 +46,14 @@ def test_responder_caps_confirmation_targets() -> None:
     # A query that matches several rules must not explode the target list.
     result = search_knowledge("橋梁 トンネル 狭隘 学校 病院 踏切 災害 交通量 夜間 特殊車両")
     assert 0 < len(result["confirmation_targets"]) <= 6
+
+
+def test_knowledge_search_stays_reachable_when_api_key_is_set(monkeypatch) -> None:
+    # The endpoint is intentionally ungated: the embedded UI cannot send the
+    # bearer token, so knowledge search must keep working in a keyed deployment.
+    monkeypatch.setenv("APP_API_KEY", "secret-key-123456")
+    response = client.post("/api/knowledge/search", json={"query": "橋梁 重量"})
+    assert response.status_code == 200
+    # Contrast: a protected data endpoint still requires the bearer token.
+    protected = client.get("/api/admin/data-sources")
+    assert protected.status_code == 401

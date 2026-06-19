@@ -169,7 +169,9 @@ def data_sources() -> list[dict[str, str]]:
     ]
 
 
-@app.post("/api/knowledge/search", dependencies=[ApiKey])
+# Read-only, stateless, non-sensitive guidance. Like /api/health it is left
+# ungated so the embedded UI (which has no APP_API_KEY) can always reach it.
+@app.post("/api/knowledge/search")
 def knowledge_search(payload: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
     result = search_knowledge(payload.query)
     return KnowledgeSearchResponse(
