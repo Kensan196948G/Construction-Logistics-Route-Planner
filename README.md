@@ -88,8 +88,33 @@ sequenceDiagram
 | ⚠️ 注意抽出 | 橋梁、トンネル、学校、病院、住宅地、交通量、災害リスク、OSM 属性不足 |
 | 📊 評価 | 注意、要確認、データ不足、除外検討、利用候補 |
 | 📄 帳票 | Markdown レポート、CSV レポート |
+| 🔎 ナレッジ検索 | 搬入計画の論点への安全側ガイダンスと確認先の提示（決定論的・信頼度 E・要レビュー） |
 | 🔐 簡易保護 | 任意の API key による基本アクセス制御 |
-| 🖥️ UI | ローカル静的 UI |
+| 🖥️ UI | 9 画面のシングルページ UI（ダッシュボード / 案件・条件 / ルート・地図 / 搬入リスクメモ / レポート / ナレッジ / 周辺施設辞書 / 管理 / システム） |
+
+## 🖥️ 画面構成
+
+UI は Claude Design のハンドオフ（`Route Planner.dc.html`）を実装した 9 画面のシングルページ構成です。`app/static/dc-runtime.js` がデザインのテンプレート方言（`sc-if` / `sc-for` / `{{ }}` バインディング）を解釈してレンダリングします。
+
+| 画面 | 内容 | バックエンド連携 |
+|---|---|---|
+| 📊 ダッシュボード | 案件一覧、要確認件数、データソース接続状態、注意箇所内訳 | サンプル表示 |
+| 📝 案件・条件入力 | 案件情報、地点・経路、車両・積載、搬入条件、回避条件 | サンプル表示 |
+| 🗺️ ルート検討・地図 | ルート候補比較、**実地図（Leaflet + OSM）**、注意箇所ピン、レイヤ切替、確認ステータス更新 | ✅ 背景地図=実データ（OSM）／ルート・ハザードはサンプル |
+| 🧾 搬入リスクメモ | 確認チェックリスト、確認先、候補サマリ、注意箇所 | サンプル表示 |
+| 📄 レポート出力 | Markdown / CSV / HTML / PDF 相当のプレビュー | サンプル表示 |
+| 🔎 ナレッジ検索 | 論点への安全側ガイダンスと確認先 | ✅ `POST /api/knowledge/search` |
+| 📍 周辺施設辞書 | 橋梁・トンネル・狭隘・学校・病院・踏切等の辞書とフィルタ | サンプル表示 |
+| 🛠️ 管理設定 | データソース、評価重み、評価ルール、ロール、操作ログ | サンプル表示 |
+| ⚙️ システム設定 | 表示・処理・通知・セキュリティの各トグル、API キー | サンプル表示 |
+
+> 起動時に `GET /api/health` で接続性を確認し、ナレッジ検索は実 API を呼び出します。ルート検討画面の背景地図は **Leaflet + OpenStreetMap タイル**の実地図です。その他の画面とルート線・注意箇所の位置はサンプルデータで動作する初期検討プロトタイプであり、外部データ・永続化連携は次フェーズの対象です（[MVP の制約](#-mvp-の制約)）。
+
+### 🗺️ 地図（ルート検討画面）
+
+- **Leaflet（vendored: `app/static/vendor/leaflet/`）+ OpenStreetMap タイル**で実地図を表示。`dc-runtime.js` の `data-keep` により、再描画をまたいで地図インスタンスを保持します（レイヤ切替で地図がリセットされません）。
+- ルート線・注意箇所は、模式座標を実地理座標へアフィン投影したサンプル表示です（**実ルート探索・実ハザード抽出は次段階**＝README ロードマップ Phase 2）。
+- タイルは内部評価向けの低頻度利用を想定。本番は専用タイル提供元（自前ホスト等）の利用が必要です（OSM タイル利用ポリシー）。背景地図には **© OpenStreetMap contributors** を表示。`app/static/component.js` の `afterRender()` で URL を差し替えると**地理院タイル**へ切替できます。
 
 ## 🧾 入力条件
 
@@ -160,12 +185,14 @@ flowchart TD
 
 ```mermaid
 flowchart TB
-    U["🖥️ Static UI<br/>app/static"] --> API["🚀 FastAPI<br/>app/main.py"]
+    U["🖥️ SPA UI<br/>app/static<br/>dc-runtime.js / component.js"] --> API["🚀 FastAPI<br/>app/main.py"]
     API --> Models["📦 Pydantic Models<br/>app/models.py"]
     API --> Engine["🧠 Risk Engine<br/>app/risk_engine.py"]
     API --> Report["📄 Reporting<br/>app/reporting.py"]
+    API --> Know["🔎 Knowledge<br/>app/knowledge.py"]
     Engine --> Store["🧺 In-memory Store<br/>PROJECTS / ROUTES"]
     Report --> Out["📤 Markdown / CSV"]
+    Know --> Guide["🧭 安全側ガイダンス<br/>確認先・信頼度 E"]
 ```
 
 ## 🚀 セットアップ
@@ -233,6 +260,7 @@ Authorization: Bearer change-me
 | `GET` | `/api/projects/{project_id}/report?format=markdown` | Markdown レポート |
 | `GET` | `/api/projects/{project_id}/report?format=csv` | CSV レポート |
 | `GET` | `/api/admin/data-sources` | データソース一覧 |
+| `POST` | `/api/knowledge/search` | ナレッジ検索（安全側ガイダンス・確認先・信頼度 E） |
 
 ## 📄 レポート出力
 
@@ -250,29 +278,61 @@ CSV は、案件 ID、ルート ID、距離、時間、リスクレベル、リ�
 ## 🧪 検証
 
 ```bash
-pytest
-python3 -m compileall app tests
+pytest                              # API + リスク評価 + ナレッジ検索（12 tests）
+ruff check .                        # lint
+python3 -m compileall app tests     # 構文・バイトコード確認
 ```
 
-## 🛠️ systemd 登録
+UI ランタイム（`dc-runtime.js`）は、9 画面の描画・`sc-if` / `sc-for` 展開・イベント配線・SVG 名前空間・入力フォーカス保持を jsdom ベースのハーネスで確認しています。この環境では Chromium が即時終了するため、ブラウザでのスクリーンショット検証は未実施です（[MVP の制約](#-mvp-の制約)）。
 
-この環境では user systemd service として登録済みです。
+## 🚢 デプロイ
+
+ネイティブ（systemd）とコンテナ（Docker）の 2 系統を用意しています。ポートを分けているため、同一ホストで同時に稼働できます。
+
+| 方式 | ポート | URL | 用途 |
+|---|---|---|---|
+| 🛠️ systemd（ネイティブ常駐） | `18017` | http://192.168.0.185:18017/ | OS 常駐・自動起動 |
+| 🐳 Docker（コンテナ） | `28080` | http://192.168.0.185:28080/ | 隔離・再現可能なデプロイ |
+
+### 🛠️ systemd 登録
+
+user systemd service として登録済みです（`enabled` + linger 有効）。
 
 | 項目 | 値 |
 |---|---|
-| 🧩 Unit | `~/.config/systemd/user/construction-logistics-route-planner.service` |
-| 🌐 URL | http://192.168.0.185:18017/ |
-| 🩺 Health | http://192.168.0.185:18017/api/health |
+| 🧩 Unit（インストール先） | `~/.config/systemd/user/construction-logistics-route-planner.service` |
+| 📄 Unit（リポジトリ雛形） | `deploy/systemd/construction-logistics-route-planner.service` |
 | 🔗 Bind | `0.0.0.0:18017` |
 
 ```bash
-systemctl --user status construction-logistics-route-planner.service
+systemctl --user enable --now construction-logistics-route-planner.service   # 登録 + 起動
+systemctl --user status  construction-logistics-route-planner.service
 systemctl --user restart construction-logistics-route-planner.service
-systemctl --user stop construction-logistics-route-planner.service
+systemctl --user stop    construction-logistics-route-planner.service
 journalctl --user -u construction-logistics-route-planner.service -f
 ```
 
 `loginctl enable-linger kensan` も有効化済みのため、ユーザーセッションがない状態でも起動対象になります。
+
+### 🐳 Docker 登録
+
+`Dockerfile`（非 root 実行・`HEALTHCHECK` 付き）と `docker-compose.yml`（host `28080` → container `8000`）で配信します。
+
+```bash
+docker compose build          # イメージ構築
+docker compose up -d          # 起動（host 28080 -> container 8000）
+docker compose ps             # 状態・health 確認
+docker compose logs -f        # ログ追従
+docker compose down           # 停止・削除
+```
+
+| 項目 | 値 |
+|---|---|
+| 🏷️ Image | `construction-logistics-route-planner:latest` |
+| 📦 Container | `construction-logistics-route-planner` |
+| 🔗 Port | `0.0.0.0:28080 -> 8000` |
+| 🩺 Health | コンテナ内で `/api/health` を 30 秒間隔監視 |
+| 🔐 API Key | `docker-compose.yml` の `APP_API_KEY` を有効化すると `/api/*`（health・knowledge を除く）を保護 |
 
 ## 📌 MVP の制約
 

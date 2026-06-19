@@ -203,6 +203,21 @@ class ReportResponse(BaseModel):
     generated_at: datetime
 
 
+class KnowledgeSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=400)
+
+
+class KnowledgeSearchResponse(BaseModel):
+    query: str
+    answer: str
+    confirmation_targets: list[str]
+    # Generated reference guidance is always the lowest reliability tier ("E"),
+    # mirroring the "信頼度 E · 要レビュー" badge in the UI.
+    reliability: DataQuality = DataQuality.estimated
+    disclaimer: str = DISCLAIMER
+    generated_at: datetime
+
+
 def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:12]}"
 

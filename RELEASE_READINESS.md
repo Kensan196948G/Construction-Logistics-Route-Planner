@@ -10,22 +10,30 @@ Production Ready is not approved because external GIS/API integration, persisten
 
 ## Implemented Scope
 
-- FastAPI application with health, project, route generation, route evaluation, route risk, report, and data source endpoints.
-- Static local UI for creating an evaluation and viewing route risk results.
+- FastAPI application with health, project, route generation, route evaluation, route risk, report, data source, and knowledge search endpoints.
+- Nine-screen single-page UI implementing the Claude Design handoff (`Route Planner.dc.html`): dashboard, project/conditions, route review & map, risk memo, report output, knowledge search, facilities dictionary, admin, and system settings.
+- Self-contained client runtime (`app/static/dc-runtime.js`) that interprets the design-component template dialect (`sc-if` / `sc-for` / `{{ }}` bindings, event handlers, SVG namespacing) with text-input focus preservation across re-renders and a `data-keep` persistent-node mechanism.
+- Real interactive basemap on the route screen: vendored Leaflet + OpenStreetMap tiles (`app/static/vendor/leaflet/`). Sample routes/hazards are affine-projected from the schematic SVG space onto real coordinates; the Leaflet instance persists across re-renders via `data-keep`. Tiles carry `© OpenStreetMap contributors`; 地理院 (GSI) tiles are a one-line swap. Real routing/hazard extraction remain deferred (roadmap Phase 2).
+- Deterministic, safety-first knowledge responder (`app/knowledge.py`) that returns conservative guidance plus confirmation targets and never asserts passability; surfaced as reliability tier "E" in the UI.
 - Deterministic sample overlay engine for bridge, tunnel, school, hospital, residential, traffic, disaster, and OSM attribute-quality risks.
 - Safety-first route scoring that never treats missing height, weight, or road restriction data as clear passage.
 - Markdown and CSV report generation with mandatory disclaimer and confirmation actions.
 - Optional `APP_API_KEY` bearer-token protection for API endpoints.
-- Unit and API flow tests.
+- Unit, API flow, and knowledge tests, plus a jsdom render harness for the UI runtime.
+- Two deployment paths on distinct ports so they can coexist: a user systemd service (`0.0.0.0:18017`) and a Docker image / `docker-compose.yml` (host `28080` → container `8000`, non-root, with a container healthcheck). `pyproject.toml` now declares a build-system and the `app` package so `pip install .` is deterministic.
 
 ## Validation Results
 
-- `pytest -q`: passed, 6 tests.
+- `pytest -q`: passed, 11 tests.
 - `ruff check .`: passed.
 - `python3 -m compileall app tests`: passed.
 - `bandit -q -r app`: passed.
 - `pip-audit .`: passed, no known vulnerabilities found.
-- HTTP smoke test on `127.0.0.1:8017`: passed for `/api/health`, `/`, project creation, route generation, route evaluation, and Markdown report.
+- `node --check` on `dc-runtime.js`, `component.js`, `app.js`: passed.
+- jsdom render harness: all 9 screens render with no exceptions, no unresolved `{{ }}` bindings, and no leftover `sc-*` tags; SVG elements land in the SVG namespace; nav transitions, layer toggles, route/hazard selection, the knowledge search round-trip, and text-input focus preservation all pass.
+- jsdom map harness (Leaflet stubbed): the map is created once and reused across re-renders and screen switches (the `data-keep` node keeps its identity); route polylines and hazard markers render; `fitBounds` runs on route change but not on layer toggles; a hazard marker click drives `selectHazard`.
+- HTTP smoke test on `127.0.0.1:8019`: passed for `/api/health`, `/`, static assets (`dc-runtime.js`, `component.js`), and `POST /api/knowledge/search`.
+- Deployment smoke tests passed on both paths: systemd service active on `0.0.0.0:18017` (health + index + assets 200), and the Docker container reported `healthy` on `28080` (health + index + all four assets 200, live knowledge search OK). `docker compose build` succeeded via `pip install .`.
 
 ## Known Limitations
 
@@ -33,7 +41,9 @@ Production Ready is not approved because external GIS/API integration, persisten
 - No PostgreSQL/PostGIS persistence; current storage is process memory.
 - No Entra ID/OIDC integration; API key protection is only a basic MVP guard.
 - No durable audit log table or external log sink.
-- Playwright screenshot validation could not be completed because Chromium exited immediately in this environment.
+- The knowledge search is a deterministic, rule-based responder, not a live LLM; the UI labels it reliability tier "E · 要レビュー".
+- Eight of the nine UI screens render from sample/demo data; only the knowledge search and the startup health check call the live backend. Live data-source, persistence, and report wiring remain deferred.
+- Playwright screenshot validation could not be completed because Chromium exited immediately in this environment (SIGTRAP). The UI runtime was instead verified with a jsdom render harness; pixel-level visual regression against the design screenshots is still outstanding.
 
 ## Release Guard
 

@@ -1,0 +1,54 @@
+{
+  "project": {
+    "name": "Construction-Logistics-Route-Planner",
+    "start_date": "2026-06-19",
+    "release_deadline": "2026-12-19",
+    "phase_mode": "development"
+  },
+  "goal": "Claude Design ハンドオフ Route Planner.dc.html を実装し Release Ready を維持する",
+  "phase": "Verify",
+  "kpi": {
+    "success_rate_target": 0.9,
+    "ci_success_rate": 1.0,
+    "test_pass_rate": 1.0,
+    "security_critical": 0,
+    "blocker_count": 0
+  },
+  "execution": {
+    "max_duration_minutes": 180,
+    "repair_count": 0,
+    "max_repair": 3,
+    "same_error_limit": 2
+  },
+  "automation": {
+    "auto_issue_generation": true,
+    "self_evolution": true
+  },
+  "completed_issues": [
+    "Implement Route Planner.dc.html as a 9-screen SPA over the FastAPI backend",
+    "Add self-contained dc-runtime.js interpreting the design-component dialect",
+    "Add deterministic safety-first knowledge search endpoint with tests"
+  ],
+  "blocked_issues": [],
+  "learning": {
+    "failure_patterns": [
+      "Chromium exits immediately (SIGTRAP) in this environment; use jsdom harness for UI runtime verification instead of Playwright screenshots."
+    ],
+    "success_patterns": [
+      "Extract design template/component/styles programmatically to preserve fidelity instead of hand-copying 1100+ lines.",
+      "Recreate template nodes via createElementNS(node.namespaceURI) so SVG subtrees render; detect events via lowercased on* attribute names."
+    ]
+  },
+  "validation": {
+    "pytest": "11 passed",
+    "ruff": "passed",
+    "compileall": "passed",
+    "bandit": "passed",
+    "pip_audit": "no known vulnerabilities",
+    "jsdom_harness": "9/9 screens render, interactions + focus + SVG namespace verified"
+  },
+  "last_session": {
+    "date": "2026-06-19",
+    "summary": "Implemented the Claude Design Route Planner handoff: 9-screen SPA, custom design-component runtime, and a tested knowledge search endpoint."
+  }
+}
