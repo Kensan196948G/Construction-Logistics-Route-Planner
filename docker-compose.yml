@@ -1,0 +1,20 @@
+# Containerized deployment of the Route Planner WebUI.
+# Host 28080 -> container 8000, kept distinct from the systemd service (18017)
+# so both deployments can run on the same host without a port conflict.
+services:
+  webui:
+    build: .
+    image: construction-logistics-route-planner:latest
+    container_name: construction-logistics-route-planner
+    ports:
+      - "28080:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # APP_API_KEY: "change-me"   # optional bearer-token protection for /api/* (health & knowledge stay open)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

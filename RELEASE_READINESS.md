@@ -19,6 +19,7 @@ Production Ready is not approved because external GIS/API integration, persisten
 - Markdown and CSV report generation with mandatory disclaimer and confirmation actions.
 - Optional `APP_API_KEY` bearer-token protection for API endpoints.
 - Unit, API flow, and knowledge tests, plus a jsdom render harness for the UI runtime.
+- Two deployment paths on distinct ports so they can coexist: a user systemd service (`0.0.0.0:18017`) and a Docker image / `docker-compose.yml` (host `28080` → container `8000`, non-root, with a container healthcheck). `pyproject.toml` now declares a build-system and the `app` package so `pip install .` is deterministic.
 
 ## Validation Results
 
@@ -30,6 +31,7 @@ Production Ready is not approved because external GIS/API integration, persisten
 - `node --check` on `dc-runtime.js`, `component.js`, `app.js`: passed.
 - jsdom render harness: all 9 screens render with no exceptions, no unresolved `{{ }}` bindings, and no leftover `sc-*` tags; SVG elements land in the SVG namespace; nav transitions, layer toggles, route/hazard selection, the knowledge search round-trip, and text-input focus preservation all pass.
 - HTTP smoke test on `127.0.0.1:8019`: passed for `/api/health`, `/`, static assets (`dc-runtime.js`, `component.js`), and `POST /api/knowledge/search`.
+- Deployment smoke tests passed on both paths: systemd service active on `0.0.0.0:18017` (health + index + assets 200), and the Docker container reported `healthy` on `28080` (health + index + all four assets 200, live knowledge search OK). `docker compose build` succeeded via `pip install .`.
 
 ## Known Limitations
 

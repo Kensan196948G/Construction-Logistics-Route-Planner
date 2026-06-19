@@ -272,32 +272,61 @@ CSV は、案件 ID、ルート ID、距離、時間、リスクレベル、リ�
 ## 🧪 検証
 
 ```bash
-pytest                              # API + リスク評価 + ナレッジ検索（11 tests）
+pytest                              # API + リスク評価 + ナレッジ検索（12 tests）
 ruff check .                        # lint
 python3 -m compileall app tests     # 構文・バイトコード確認
 ```
 
 UI ランタイム（`dc-runtime.js`）は、9 画面の描画・`sc-if` / `sc-for` 展開・イベント配線・SVG 名前空間・入力フォーカス保持を jsdom ベースのハーネスで確認しています。この環境では Chromium が即時終了するため、ブラウザでのスクリーンショット検証は未実施です（[MVP の制約](#-mvp-の制約)）。
 
-## 🛠️ systemd 登録
+## 🚢 デプロイ
 
-この環境では user systemd service として登録済みです。
+ネイティブ（systemd）とコンテナ（Docker）の 2 系統を用意しています。ポートを分けているため、同一ホストで同時に稼働できます。
+
+| 方式 | ポート | URL | 用途 |
+|---|---|---|---|
+| 🛠️ systemd（ネイティブ常駐） | `18017` | http://192.168.0.185:18017/ | OS 常駐・自動起動 |
+| 🐳 Docker（コンテナ） | `28080` | http://192.168.0.185:28080/ | 隔離・再現可能なデプロイ |
+
+### 🛠️ systemd 登録
+
+user systemd service として登録済みです（`enabled` + linger 有効）。
 
 | 項目 | 値 |
 |---|---|
-| 🧩 Unit | `~/.config/systemd/user/construction-logistics-route-planner.service` |
-| 🌐 URL | http://192.168.0.185:18017/ |
-| 🩺 Health | http://192.168.0.185:18017/api/health |
+| 🧩 Unit（インストール先） | `~/.config/systemd/user/construction-logistics-route-planner.service` |
+| 📄 Unit（リポジトリ雛形） | `deploy/systemd/construction-logistics-route-planner.service` |
 | 🔗 Bind | `0.0.0.0:18017` |
 
 ```bash
-systemctl --user status construction-logistics-route-planner.service
+systemctl --user enable --now construction-logistics-route-planner.service   # 登録 + 起動
+systemctl --user status  construction-logistics-route-planner.service
 systemctl --user restart construction-logistics-route-planner.service
-systemctl --user stop construction-logistics-route-planner.service
+systemctl --user stop    construction-logistics-route-planner.service
 journalctl --user -u construction-logistics-route-planner.service -f
 ```
 
 `loginctl enable-linger kensan` も有効化済みのため、ユーザーセッションがない状態でも起動対象になります。
+
+### 🐳 Docker 登録
+
+`Dockerfile`（非 root 実行・`HEALTHCHECK` 付き）と `docker-compose.yml`（host `28080` → container `8000`）で配信します。
+
+```bash
+docker compose build          # イメージ構築
+docker compose up -d          # 起動（host 28080 -> container 8000）
+docker compose ps             # 状態・health 確認
+docker compose logs -f        # ログ追従
+docker compose down           # 停止・削除
+```
+
+| 項目 | 値 |
+|---|---|
+| 🏷️ Image | `construction-logistics-route-planner:latest` |
+| 📦 Container | `construction-logistics-route-planner` |
+| 🔗 Port | `0.0.0.0:28080 -> 8000` |
+| 🩺 Health | コンテナ内で `/api/health` を 30 秒間隔監視 |
+| 🔐 API Key | `docker-compose.yml` の `APP_API_KEY` を有効化すると `/api/*`（health・knowledge を除く）を保護 |
 
 ## 📌 MVP の制約
 
