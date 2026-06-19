@@ -250,6 +250,92 @@ class Component extends DCLogic {
     };
   }
 
+  // ---- Map (Leaflet) -------------------------------------------------------
+  // Affine projection from the schematic SVG space (viewBox 1000x720) onto a
+  // real geographic bounding box, so the sample routes/hazards land on real
+  // streets. +X -> East (+lng), +Y -> South (-lat). Demo area: Tokyo riverside.
+  _geo(x, y){
+    const WEST=139.72, EAST=139.80, NORTH=35.69, SOUTH=35.63;
+    return [ NORTH - (y/720)*(NORTH-SOUTH), WEST + (x/1000)*(EAST-WEST) ];
+  }
+  _pathLatLngs(d){
+    const pts=[]; const re=/[ML]\s*(-?\d+(?:\.\d+)?)[ ,]+(-?\d+(?:\.\d+)?)/g; let m;
+    while((m=re.exec(d))) pts.push(this._geo(parseFloat(m[1]), parseFloat(m[2])));
+    return pts;
+  }
+  _esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  _endpointIcon(label, bg, ring){
+    const border = ring ? ('border:2px solid '+ring+';') : 'border:2px solid #fff;';
+    return L.divIcon({ className:'', iconSize:[28,28], iconAnchor:[14,14],
+      html:'<div style="width:28px;height:28px;border-radius:50%;background:'+bg+';'+border+
+        'color:#fff;font:700 12px \'Noto Sans JP\',sans-serif;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.4)">'+label+'</div>' });
+  }
+  _hazardIcon(k, color, sel){
+    const size = sel?34:28; const ring = sel?'box-shadow:0 0 0 3px #ff6a00;':'box-shadow:0 1px 4px rgba(0,0,0,.4);';
+    return L.divIcon({ className:'', iconSize:[size,size], iconAnchor:[size/2,size],
+      html:'<div style="width:'+size+'px;height:'+size+'px;border-radius:7px 7px 7px 1px;background:'+color+
+        ';border:2px solid #fff;'+ring+'color:#fff;font:700 14px \'Noto Sans JP\',sans-serif;display:flex;align-items:center;justify-content:center">'+k+'</div>' });
+  }
+  // Called by the runtime after every render. Builds the Leaflet map once on the
+  // persistent (data-keep) node, then syncs routes/hazards to current state.
+  afterRender(){
+    if(typeof L==='undefined') return;            // no Leaflet (e.g. jsdom harness)
+    if(this.screenName()!=='routes') return;       // map lives only on the routes screen
+    const el = document.getElementById('route-map');
+    if(!el) return;
+    if(!this._map){
+      // OpenStreetMap basemap (low-volume / internal use; for production use a
+      // dedicated tile provider per the OSM tile usage policy). To use 地理院タイル
+      // instead: 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png' (attr 地理院タイル).
+      const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom:19, attribution:'© OpenStreetMap contributors' });
+      this._map = L.map(el, { zoomControl:false, attributionControl:false, center:[35.66,139.76], zoom:13, layers:[osm] });
+      this._routeLayer = L.layerGroup().addTo(this._map);
+      this._hazardLayer = L.layerGroup().addTo(this._map);
+      this._endpointLayer = L.layerGroup().addTo(this._map);
+      this._fitFor = null;
+    } else {
+      this._map.invalidateSize();                   // re-attached after a screen switch
+    }
+    this._drawMap();
+  }
+  _drawMap(){
+    const routes = this.routesData || [];
+    const active = routes.find(r=>r.id===this.state.activeRouteId) || routes[0];
+    if(!active) return;
+
+    // Route polylines: inactive dashed grey, active solid blue (drawn last/on top).
+    this._routeLayer.clearLayers();
+    routes.forEach(r=>{ if(r.id===active.id) return;
+      L.polyline(this._pathLatLngs(r.d), { color:'#8d96a1', weight:3, dashArray:'2 8', opacity:0.8 }).addTo(this._routeLayer); });
+    const pts = this._pathLatLngs(active.d);
+    L.polyline(pts, { color:'#ffffff', weight:9 }).addTo(this._routeLayer);
+    L.polyline(pts, { color:'#1559b8', weight:5 }).addTo(this._routeLayer);
+
+    // Start / destination markers (shared across routes).
+    this._endpointLayer.clearLayers();
+    L.marker(this._geo(110,650), { icon:this._endpointIcon('発','#1f8a4c') }).bindPopup('出発地').addTo(this._endpointLayer);
+    L.marker(this._geo(890,140), { icon:this._endpointIcon('現','#1a1d21','#ff6a00') }).bindPopup('現場（到着）').addTo(this._endpointLayer);
+
+    // Hazards for the active route, filtered by the visible layers.
+    this._hazardLayer.clearLayers();
+    const layers = this.state.layers;
+    (this.hazardsByRoute[active.id]||[]).filter(h=>layers[this.layerGroup(h.type)]).forEach(h=>{
+      const tm=this.typeMeta(h.type), lm=this.levelMeta(h.level), sel=h.id===this.state.selectedHazardId;
+      const marker = L.marker(this._geo(h.x,h.y), { icon:this._hazardIcon(tm.k, lm.color, sel) });
+      marker.bindPopup('<b>'+this._esc(h.name)+'</b><br>'+this._esc(lm.label)+' · '+this._esc(tm.label)+
+        '<br>'+this._esc(h.summary||'')+'<br><span style="color:#9aa0a7">出典: '+this._esc(h.source||'')+'</span>');
+      marker.on('click', ()=>this.selectHazard(h.id));
+      this._hazardLayer.addLayer(marker);
+    });
+
+    // Fit to the active route only when it changes (keep view stable on toggles).
+    if(this._fitFor!==active.id && pts.length){
+      this._map.fitBounds(L.latLngBounds(pts).pad(0.25));
+      this._fitFor = active.id;
+    }
+  }
+
   renderVals(){
     const accent = this.props.accent || '#ff6a00';
     const soft = this.hexToRgba(accent, 0.14);

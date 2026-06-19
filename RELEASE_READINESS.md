@@ -12,7 +12,8 @@ Production Ready is not approved because external GIS/API integration, persisten
 
 - FastAPI application with health, project, route generation, route evaluation, route risk, report, data source, and knowledge search endpoints.
 - Nine-screen single-page UI implementing the Claude Design handoff (`Route Planner.dc.html`): dashboard, project/conditions, route review & map, risk memo, report output, knowledge search, facilities dictionary, admin, and system settings.
-- Self-contained client runtime (`app/static/dc-runtime.js`) that interprets the design-component template dialect (`sc-if` / `sc-for` / `{{ }}` bindings, event handlers, SVG namespacing) with text-input focus preservation across re-renders.
+- Self-contained client runtime (`app/static/dc-runtime.js`) that interprets the design-component template dialect (`sc-if` / `sc-for` / `{{ }}` bindings, event handlers, SVG namespacing) with text-input focus preservation across re-renders and a `data-keep` persistent-node mechanism.
+- Real interactive basemap on the route screen: vendored Leaflet + OpenStreetMap tiles (`app/static/vendor/leaflet/`). Sample routes/hazards are affine-projected from the schematic SVG space onto real coordinates; the Leaflet instance persists across re-renders via `data-keep`. Tiles carry `© OpenStreetMap contributors`; 地理院 (GSI) tiles are a one-line swap. Real routing/hazard extraction remain deferred (roadmap Phase 2).
 - Deterministic, safety-first knowledge responder (`app/knowledge.py`) that returns conservative guidance plus confirmation targets and never asserts passability; surfaced as reliability tier "E" in the UI.
 - Deterministic sample overlay engine for bridge, tunnel, school, hospital, residential, traffic, disaster, and OSM attribute-quality risks.
 - Safety-first route scoring that never treats missing height, weight, or road restriction data as clear passage.
@@ -30,6 +31,7 @@ Production Ready is not approved because external GIS/API integration, persisten
 - `pip-audit .`: passed, no known vulnerabilities found.
 - `node --check` on `dc-runtime.js`, `component.js`, `app.js`: passed.
 - jsdom render harness: all 9 screens render with no exceptions, no unresolved `{{ }}` bindings, and no leftover `sc-*` tags; SVG elements land in the SVG namespace; nav transitions, layer toggles, route/hazard selection, the knowledge search round-trip, and text-input focus preservation all pass.
+- jsdom map harness (Leaflet stubbed): the map is created once and reused across re-renders and screen switches (the `data-keep` node keeps its identity); route polylines and hazard markers render; `fitBounds` runs on route change but not on layer toggles; a hazard marker click drives `selectHazard`.
 - HTTP smoke test on `127.0.0.1:8019`: passed for `/api/health`, `/`, static assets (`dc-runtime.js`, `component.js`), and `POST /api/knowledge/search`.
 - Deployment smoke tests passed on both paths: systemd service active on `0.0.0.0:18017` (health + index + assets 200), and the Docker container reported `healthy` on `28080` (health + index + all four assets 200, live knowledge search OK). `docker compose build` succeeded via `pip install .`.
 

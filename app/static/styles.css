@@ -11,3 +11,8 @@
 /* Mount host fills the viewport; the app's root div uses height:100vh. */
 #app{display:block;}
 html,body,#app{height:100%;}
+
+/* Leaflet route map (routes screen). The container is z-index:0 so its internal
+   panes/controls stay below the design's corner overlays, which paint above it. */
+#route-map{width:100%;height:100%;}
+#route-map .leaflet-container{background:#ede9df;font:inherit;}

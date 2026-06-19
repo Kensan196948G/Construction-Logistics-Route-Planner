@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/assets/styles.css" />
 </head>
 <body>
@@ -414,73 +415,7 @@
           </div>
 
           <div style="flex:1; position:relative; min-width:0; background:#ede9df; overflow:hidden;">
-            <svg viewBox="0 0 1000 720" preserveAspectRatio="xMidYMid meet" style="position:absolute; inset:0; width:100%; height:100%; display:block;">
-              <rect x="-60" y="-60" width="1120" height="840" fill="#ede9df"></rect>
-              <ellipse cx="175" cy="180" rx="95" ry="72" fill="#cfe2bd"></ellipse>
-              <ellipse cx="760" cy="468" rx="80" ry="58" fill="#cfe2bd"></ellipse>
-              <path d="M820,560 L1060,560 L1060,780 L780,780 Z" fill="#aacfe6"></path>
-              <path d="M300,-40 C360,150 470,200 510,360 C548,512 720,540 1060,612" fill="none" stroke="#aacfe6" stroke-width="46" stroke-linecap="round"></path>
-              <g stroke="#d6d0c2" fill="none" stroke-linecap="round">
-                <line x1="-40" y1="330" x2="1040" y2="330" stroke-width="25"></line>
-                <line x1="640" y1="-40" x2="640" y2="760" stroke-width="23"></line>
-                <line x1="-40" y1="500" x2="1040" y2="500" stroke-width="17"></line>
-                <line x1="-40" y1="170" x2="1040" y2="170" stroke-width="17"></line>
-                <line x1="180" y1="-40" x2="180" y2="760" stroke-width="16"></line>
-                <line x1="360" y1="-40" x2="360" y2="760" stroke-width="16"></line>
-                <line x1="420" y1="330" x2="420" y2="760" stroke-width="13"></line>
-                <line x1="-40" y1="210" x2="430" y2="210" stroke-width="12"></line>
-                <line x1="540" y1="330" x2="540" y2="560" stroke-width="12"></line>
-              </g>
-              <g fill="none" stroke-linecap="round">
-                <line x1="-40" y1="330" x2="1040" y2="330" stroke="#f7e3a3" stroke-width="18"></line>
-                <line x1="640" y1="-40" x2="640" y2="760" stroke="#f7e3a3" stroke-width="16"></line>
-                <line x1="-40" y1="500" x2="1040" y2="500" stroke="#ffffff" stroke-width="11"></line>
-                <line x1="-40" y1="170" x2="1040" y2="170" stroke="#ffffff" stroke-width="11"></line>
-                <line x1="180" y1="-40" x2="180" y2="760" stroke="#ffffff" stroke-width="10"></line>
-                <line x1="360" y1="-40" x2="360" y2="760" stroke="#ffffff" stroke-width="10"></line>
-                <line x1="420" y1="330" x2="420" y2="760" stroke="#ffffff" stroke-width="8"></line>
-                <line x1="-40" y1="210" x2="430" y2="210" stroke="#ffffff" stroke-width="7"></line>
-                <line x1="540" y1="330" x2="540" y2="560" stroke="#ffffff" stroke-width="7"></line>
-              </g>
-              <g style="font-family:'Noto Sans JP',sans-serif;" fill="#867f6f">
-                <text x="795" y="322" font-size="13" font-weight="600">国道○○号</text>
-                <text x="656" y="450" font-size="12" font-weight="600" transform="rotate(90 656 450)">県道△△線</text>
-                <text x="205" y="492" font-size="11">市道□□線</text>
-                <text x="468" y="248" font-size="12" font-style="italic" fill="#5b8fb0" transform="rotate(57 468 248)">〇〇川</text>
-                <text x="132" y="186" font-size="12" fill="#5a8a4a">〇〇公園</text>
-                <text x="232" y="612" font-size="12" fill="#a39c88">××町</text>
-                <text x="772" y="262" font-size="12" fill="#a39c88">△△町</text>
-                <text x="846" y="662" font-size="11" fill="#5b8fb0">◇◇埠頭</text>
-              </g>
-              <sc-for list="{{ routeRender }}" as="rl" hint-placeholder-count="2">
-                <path d="{{ rl.d }}" style="{{ rl.css }}"></path>
-              </sc-for>
-              <sc-for list="{{ visibleHazards }}" as="h" hint-placeholder-count="6">
-                <g transform="{{ h.transform }}" onClick="{{ h.onClick }}" style="cursor:pointer;">
-                  <ellipse cx="0" cy="-1" rx="8" ry="2.5" fill="rgba(0,0,0,0.18)"></ellipse>
-                  <sc-if value="{{ h.isSel }}" hint-placeholder-val="{{ false }}">
-                    <rect x="-20" y="-49" width="40" height="44" rx="10" fill="none" stroke="{{ accent }}" stroke-width="3"></rect>
-                  </sc-if>
-                  <path d="M0,0 L-6,-9 L6,-9 Z" fill="{{ h.pinColor }}"></path>
-                  <rect x="-15" y="-43" width="30" height="34" rx="7" fill="{{ h.pinColor }}" stroke="#ffffff" stroke-width="2"></rect>
-                  <text x="0" y="-25" text-anchor="middle" dominant-baseline="central" fill="#ffffff" style="font-family:'Noto Sans JP',sans-serif; font-size:15px; font-weight:700;">{{ h.k }}</text>
-                </g>
-              </sc-for>
-              <g transform="translate(110,650)">
-                <ellipse cx="0" cy="0" rx="9" ry="3" fill="rgba(0,0,0,0.2)"></ellipse>
-                <path d="M0,0 L-8,-12 L8,-12 Z" fill="#1f8a4c"></path>
-                <circle cx="0" cy="-24" r="14" fill="#1f8a4c" stroke="#ffffff" stroke-width="2.5"></circle>
-                <text x="0" y="-24" text-anchor="middle" dominant-baseline="central" fill="#ffffff" style="font-family:'Noto Sans JP',sans-serif;font-size:13px;font-weight:700;">発</text>
-                <text x="0" y="11" text-anchor="middle" fill="#3a4a36" style="font-family:'Noto Sans JP',sans-serif;font-size:11px;font-weight:600;">出発地</text>
-              </g>
-              <g transform="translate(890,140)">
-                <ellipse cx="0" cy="0" rx="9" ry="3" fill="rgba(0,0,0,0.2)"></ellipse>
-                <path d="M0,0 L-8,-12 L8,-12 Z" fill="#1a1d21"></path>
-                <circle cx="0" cy="-24" r="14" fill="#1a1d21" stroke="#ff6a00" stroke-width="2.5"></circle>
-                <text x="0" y="-24" text-anchor="middle" dominant-baseline="central" fill="#ffffff" style="font-family:'Noto Sans JP',sans-serif;font-size:13px;font-weight:700;">現</text>
-                <text x="0" y="11" text-anchor="middle" fill="#3a3a3a" style="font-family:'Noto Sans JP',sans-serif;font-size:11px;font-weight:600;">現場(到着)</text>
-              </g>
-            </svg>
+            <div data-keep="route-map" id="route-map" style="position:absolute; inset:0; z-index:0; background:#ede9df;"></div>
 
             <div style="position:absolute; top:12px; left:12px; background:rgba(255,255,255,0.96); border:1.5px solid #d4cfc4; border-radius:7px; padding:9px 12px; display:flex; align-items:center; gap:11px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
               <span style="width:26px; height:26px; flex:none; border-radius:6px; background:{{ activeLvColor }}; color:#fff; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; display:flex; align-items:center; justify-content:center;">{{ active.letter }}</span>
@@ -517,9 +452,9 @@
             <div style="position:absolute; bottom:12px; right:12px; text-align:right;">
               <div style="display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,0.92); border:1px solid #d4cfc4; border-radius:5px; padding:4px 8px; margin-bottom:5px;">
                 <span style="width:54px; height:5px; border:1.5px solid #6b7079; border-top:none; display:inline-block;"></span>
-                <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#5e646c;">500 m</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#5e646c;">参考</span>
               </div>
-              <div style="font-size:10px; color:#8a8f98; background:rgba(237,233,223,0.85); padding:2px 6px; border-radius:4px;">地図は公開データの模擬表示（OSM / 国土数値情報 等）</div>
+              <div style="font-size:10px; color:#8a8f98; background:rgba(237,233,223,0.85); padding:2px 6px; border-radius:4px;">背景地図 © OpenStreetMap contributors。ルート線・注意箇所はサンプル表示で、実ルート探索・実ハザード抽出は次段階です。</div>
             </div>
           </div>
 
@@ -1174,6 +1109,7 @@
   </div>
 </div>
   </template>
+  <script src="/assets/vendor/leaflet/leaflet.js"></script>
   <script src="/assets/dc-runtime.js"></script>
   <script src="/assets/component.js"></script>
   <script src="/assets/app.js"></script>

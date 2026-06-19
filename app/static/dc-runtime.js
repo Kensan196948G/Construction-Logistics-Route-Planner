@@ -106,7 +106,8 @@
   }
 
   // Render one source node against a scope, returning an array of live nodes.
-  function renderNode(node, scope, out) {
+  // ctx carries the persistent-node registry ({ kept }).
+  function renderNode(node, scope, out, ctx) {
     if (node.nodeType === 3) { // text
       out.push(document.createTextNode(interp(node.nodeValue, scope)));
       return;
@@ -128,7 +129,7 @@
         childScope[as] = list[i];
         childScope[as + '_index'] = i;
         var kids = node.childNodes;
-        for (var j = 0; j < kids.length; j++) renderNode(kids[j], childScope, out);
+        for (var j = 0; j < kids.length; j++) renderNode(kids[j], childScope, out, ctx);
       }
       return;
     }
@@ -138,7 +139,16 @@
       var cond = condExpr ? evalExpr(condExpr, scope) : false;
       if (!cond) return;
       var ck = node.childNodes;
-      for (var k = 0; k < ck.length; k++) renderNode(ck[k], scope, out);
+      for (var k = 0; k < ck.length; k++) renderNode(ck[k], scope, out, ctx);
+      return;
+    }
+
+    // Persistent node: reuse the same live element across re-renders so an
+    // imperatively-managed widget (e.g. a Leaflet map bound to this node)
+    // survives setState(). On first sight it is built normally and cached.
+    var keep = node.getAttribute('data-keep');
+    if (keep && ctx && ctx.kept[keep]) {
+      out.push(ctx.kept[keep]);
       return;
     }
 
@@ -155,9 +165,10 @@
 
     var children = node.childNodes;
     var childOut = [];
-    for (var c = 0; c < children.length; c++) renderNode(children[c], scope, childOut);
+    for (var c = 0; c < children.length; c++) renderNode(children[c], scope, childOut, ctx);
     for (var n = 0; n < childOut.length; n++) el.appendChild(childOut[n]);
 
+    if (keep && ctx) ctx.kept[keep] = el;
     out.push(el);
   }
 
@@ -194,6 +205,8 @@
     this.props = props || {};
     this._template = null;
     this._mountEl = null;
+    // Registry of data-keep="<key>" nodes reused across re-renders.
+    this._kept = {};
   }
 
   DCLogic.prototype.mount = function (templateEl, mountEl) {
@@ -224,12 +237,17 @@
     }
     var focus = captureFocus(this._mountEl);
     var out = [];
+    var ctx = { kept: this._kept };
     var src = this._template.content.childNodes;
-    for (var i = 0; i < src.length; i++) renderNode(src[i], vals, out);
+    for (var i = 0; i < src.length; i++) renderNode(src[i], vals, out, ctx);
     var frag = document.createDocumentFragment();
     for (var j = 0; j < out.length; j++) frag.appendChild(out[j]);
     this._mountEl.replaceChildren(frag);
     restoreFocus(this._mountEl, focus);
+    // Lifecycle hook for imperative widgets (e.g. the Leaflet map).
+    if (typeof this.afterRender === 'function') {
+      try { this.afterRender(); } catch (err) { console.error('afterRender failed', err); }
+    }
   };
 
   global.DCLogic = DCLogic;
