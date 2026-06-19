@@ -7,10 +7,13 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.knowledge import search_knowledge
 from app.models import (
     DISCLAIMER,
     EvaluationRequest,
     EvaluationResponse,
+    KnowledgeSearchRequest,
+    KnowledgeSearchResponse,
     Project,
     ProjectCreate,
     ReportResponse,
@@ -164,6 +167,17 @@ def data_sources() -> list[dict[str, str]]:
             "note": "施設・災害リスクのサンプル抽出を行います。",
         },
     ]
+
+
+@app.post("/api/knowledge/search", dependencies=[ApiKey])
+def knowledge_search(payload: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
+    result = search_knowledge(payload.query)
+    return KnowledgeSearchResponse(
+        query=payload.query,
+        answer=str(result["answer"]),
+        confirmation_targets=list(result["confirmation_targets"]),
+        generated_at=now_utc(),
+    )
 
 
 app.mount("/assets", StaticFiles(directory="app/static"), name="assets")
