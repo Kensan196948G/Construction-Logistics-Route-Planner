@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Construction Logistics Route Planner</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Initial Route Review</p>
+        <h1>Construction Logistics Route Planner</h1>
+      </div>
+      <div class="status" id="healthStatus">API確認中</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel form-panel" aria-label="案件入力">
+        <h2>案件・搬入条件</h2>
+        <form id="projectForm">
+          <label>
+            工事件名
+            <input name="project_name" value="中央区仮設材搬入計画" required />
+          </label>
+          <label>
+            現場名
+            <input name="site_name" value="中央区施工ヤード" required />
+          </label>
+          <label>
+            担当者
+            <input name="planner" value="施工計画担当" required />
+          </label>
+          <div class="grid2">
+            <label>
+              出発地名
+              <input name="start_name" value="資材センター" required />
+            </label>
+            <label>
+              到着地名
+              <input name="destination_name" value="現場ゲート" required />
+            </label>
+            <label>
+              出発 緯度
+              <input name="start_lat" type="number" step="0.000001" value="35.681236" required />
+            </label>
+            <label>
+              出発 経度
+              <input name="start_lng" type="number" step="0.000001" value="139.767125" required />
+            </label>
+            <label>
+              到着 緯度
+              <input name="destination_lat" type="number" step="0.000001" value="35.658581" required />
+            </label>
+            <label>
+              到着 経度
+              <input name="destination_lng" type="number" step="0.000001" value="139.745433" required />
+            </label>
+          </div>
+
+          <div class="grid2">
+            <label>
+              車両種別
+              <select name="vehicle_type">
+                <option value="heavy_truck">大型</option>
+                <option value="trailer">トレーラー</option>
+                <option value="heavy_equipment_carrier">重機回送</option>
+                <option value="ordinary_truck">普通貨物</option>
+                <option value="other">その他</option>
+              </select>
+            </label>
+            <label>
+              時間帯
+              <select name="time_window">
+                <option value="morning_peak">朝ピーク</option>
+                <option value="daytime">日中</option>
+                <option value="evening_peak">夕ピーク</option>
+                <option value="night">夜間</option>
+              </select>
+            </label>
+            <label>
+              全高 m
+              <input name="height_m" type="number" step="0.1" value="3.8" />
+            </label>
+            <label>
+              総重量 t
+              <input name="gross_weight_t" type="number" step="0.1" value="32" />
+            </label>
+          </div>
+
+          <label class="check">
+            <input name="special_vehicle_flag" type="checkbox" checked />
+            特殊車両に該当する可能性
+          </label>
+
+          <button type="submit">評価を実行</button>
+        </form>
+      </section>
+
+      <section class="workspace" aria-label="評価結果">
+        <section class="map-panel">
+          <div class="map-toolbar">
+            <h2>ルート候補</h2>
+            <button id="downloadMarkdown" type="button" disabled>Markdown</button>
+          </div>
+          <svg id="routeMap" viewBox="0 0 800 420" role="img" aria-label="ルート概略図">
+            <rect x="0" y="0" width="800" height="420" fill="#eef4f1"></rect>
+            <path d="M0 320 C180 260 260 370 430 300 S630 220 800 260" fill="none" stroke="#c8d8d1" stroke-width="54"></path>
+            <path d="M0 170 C120 120 250 190 370 140 S620 70 800 120" fill="none" stroke="#d9dfd6" stroke-width="38"></path>
+            <g id="routeLines"></g>
+          </svg>
+        </section>
+
+        <section class="results">
+          <div id="summary" class="summary empty">評価結果はここに表示されます。</div>
+          <div id="routes" class="route-list"></div>
+          <pre id="reportPreview" class="report" aria-label="Markdownレポート"></pre>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      本システムは公開データに基づく初期検討支援であり、通行可否や許認可を保証しません。
+    </footer>
+
+    <script src="/assets/app.js"></script>
+  </body>
+</html>
