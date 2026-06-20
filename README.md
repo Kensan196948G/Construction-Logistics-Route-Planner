@@ -299,6 +299,8 @@ python -m build --wheel && python scripts/check_package_assets.py  # 配布物�
 >
 > **`pip-audit` のスコープ**: `pip-audit .`（プロジェクトパス指定）は **宣言依存（fastapi / uvicorn / pydantic とその推移）のみ** を隔離解決して監査します。`pip-audit` を引数なしで実行すると現在の環境全体（pip-audit 自身の依存を含む）を監査してしまうため、必ずパス指定を使ってください。
 
+依存の脆弱性是正方針・報告窓口・Dependabot 設定は [`SECURITY.md`](SECURITY.md) を参照してください。
+
 UI ランタイム（`dc-runtime.js`）は、9 画面の描画・`sc-if` / `sc-for` 展開・イベント配線・SVG 名前空間・入力フォーカス保持を jsdom ベースのハーネスで確認しています。この環境では Chromium が即時終了するため、ブラウザでのスクリーンショット検証は未実施です（[MVP の制約](#-mvp-の制約)）。
 
 ## 🚢 デプロイ
