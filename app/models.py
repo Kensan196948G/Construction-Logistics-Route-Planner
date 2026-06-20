@@ -206,6 +206,18 @@ class ReportResponse(BaseModel):
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=400)
 
+    @field_validator("query")
+    @classmethod
+    def strip_non_blank(cls, value: str) -> str:
+        # `min_length=1` alone lets whitespace-only input ("   ") through; the
+        # responder then strips it to "" and returns a generic 200. Reject blank
+        # queries here so the non-empty contract is enforced (-> 422), and store
+        # the trimmed value so the echoed query and search input stay clean.
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("query must not be blank")
+        return stripped
+
 
 class KnowledgeSearchResponse(BaseModel):
     query: str
