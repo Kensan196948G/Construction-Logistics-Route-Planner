@@ -31,6 +31,24 @@ def test_empty_query_is_rejected() -> None:
     assert response.status_code == 422
 
 
+def test_whitespace_only_query_is_rejected() -> None:
+    # "   " satisfies min_length=1 but is semantically empty; the validator must
+    # reject it instead of letting the responder return a generic 200.
+    for blank in ("   ", "\t", "　　"):  # spaces, tab, full-width spaces
+        response = client.post("/api/knowledge/search", json={"query": blank})
+        assert response.status_code == 422, blank
+
+
+def test_query_is_trimmed_before_search() -> None:
+    # A padded query is normalized: the echoed query is trimmed and the topic
+    # still matches (leading/trailing whitespace must not defeat keyword search).
+    response = client.post("/api/knowledge/search", json={"query": "  橋梁 重量  "})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["query"] == "橋梁 重量"
+    assert "橋梁" in body["answer"]
+
+
 def test_responder_never_asserts_passability() -> None:
     # The responder must not produce affirmative passability claims for any topic.
     forbidden = ("通行可能です", "通行できます", "問題ありません")
