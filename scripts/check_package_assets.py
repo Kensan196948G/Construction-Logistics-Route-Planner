@@ -41,7 +41,8 @@ def main(argv: list[str]) -> int:
         return 1
 
     wheel = wheels[0]
-    names = set(zipfile.ZipFile(wheel).namelist())
+    with zipfile.ZipFile(wheel) as zf:
+        names = set(zf.namelist())
     missing = [asset for asset in REQUIRED if asset not in names]
     if missing:
         print(f"{wheel}: missing {len(missing)} required static asset(s):")
