@@ -17,6 +17,8 @@ dependencies = [
 dev = [
     "httpx>=0.27",
     "pytest>=8.2",
+    "ruff>=0.6",
+    "bandit>=1.7",
 ]
 
 # Explicit package list so `pip install .` is deterministic (the repo also has a
@@ -25,7 +27,10 @@ dev = [
 packages = ["app"]
 
 [tool.setuptools.package-data]
-app = ["static/*"]
+# Recursive glob: a single-level "static/*" silently drops the vendored
+# Leaflet tree (static/vendor/leaflet/**), breaking the map on `pip install .`
+# deployments (Docker). "**/*" keeps every static asset in the wheel/sdist.
+app = ["static/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
