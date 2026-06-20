@@ -138,6 +138,9 @@ class Component extends DCLogic {
       });
       if(!res.ok) throw new Error('http ' + res.status);
       const data = await res.json();
+      // Drop a stale response: if the user edited the query while this request
+      // was in flight, applying it would desync the shown question and answer.
+      if((this.state.kQuery||'').trim() !== q){ this.setState({ kSearching:false }); return; }
       let text = (data.answer || '').trim();
       const targets = Array.isArray(data.confirmation_targets) ? data.confirmation_targets : [];
       if(targets.length){
@@ -145,6 +148,7 @@ class Component extends DCLogic {
       }
       this.setState({ kAnswer: text, kSearching:false });
     } catch(e){
+      if((this.state.kQuery||'').trim() !== q){ this.setState({ kSearching:false }); return; }
       this.setState({ kSearching:false, kError:'検索を実行できませんでした。時間をおいて再度お試しください。' });
     }
   }
@@ -469,6 +473,9 @@ class Component extends DCLogic {
       if(h){
         const tm=this.typeMeta(h.type); const lm=lev(h.level); const rm=this.rankMeta(h.rank);
         const cur = this.state.hazardStatus[h.id]||h.status;
+        // Project through the same _geo() the map markers use, so the detail
+        // panel's coordinates match the Leaflet marker position exactly.
+        const [hLat, hLng] = this._geo(h.x, h.y);
         const statusOptions = ['unconfirmed','checking','confirmed_ok','confirmed_ng','not_applicable'].map(key=>{
           const sm=this.hzStatusMeta(key); const on=cur===key;
           return { key, label:sm.label, on, onClick:()=>this.setHazardStatus(h.id,key),
@@ -477,7 +484,7 @@ class Component extends DCLogic {
         hazard = Object.assign({}, h, { k:tm.k, typeLabel:tm.label, pinColor:lm.color,
           lvLabel:lm.label, lvColor:lm.color, lvBg:lm.bg, lvBorder:lm.border,
           rankLabel:h.rank, rankBg:rm.bg, rankColor:rm.color,
-          coords:(35.62-h.y*0.00014).toFixed(5)+'°N, '+(139.71+h.x*0.00016).toFixed(5)+'°E',
+          coords:hLat.toFixed(5)+'°N, '+hLng.toFixed(5)+'°E',
           routeName:active.name, statusOptions });
       }
     }
