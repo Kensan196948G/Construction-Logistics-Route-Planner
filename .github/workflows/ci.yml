@@ -1,0 +1,136 @@
+name: CI
+
+# Quality gate for the Construction Logistics Route Planner.
+# Mirrors the local validation suite recorded in RELEASE_READINESS.md so that
+# `ci_success_rate` in state.json is a verifiable fact rather than a self-claim.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least-privilege token: this workflow only reads the repository.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, build & test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          # No requirements.txt in this repo; hash pyproject.toml instead so the
+          # pip cache key resolves (otherwise setup-python errors "No file matched").
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project + dev tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Compile (syntax check)
+        run: python -m compileall -q app tests
+
+      - name: Pytest
+        run: pytest
+
+      - name: Bandit (code security scan)
+        run: bandit -q -r app
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "20"
+
+      - name: Node syntax check (client runtime)
+        run: |
+          for f in app.js component.js dc-runtime.js; do
+            node --check "app/static/$f"
+          done
+
+  package:
+    name: Package integrity
+    runs-on: ubuntu-latest
+    # Builds a real (non-editable) wheel and asserts every served static asset
+    # survives packaging. Editable installs (the quality job, local dev) import
+    # from the source tree and cannot catch package-data globbing regressions
+    # like the vendored Leaflet tree being dropped from `pip install .`.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+
+      - name: Assert static assets are packaged
+        run: python scripts/check_package_assets.py
+
+  dependency-audit:
+    name: Dependency audit (advisory)
+    runs-on: ubuntu-latest
+    # Advisory only: transitive-dependency CVEs surface daily and must not block
+    # unrelated PRs. Findings are surfaced as an artifact for triage; remediation
+    # is tracked separately.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          # No requirements.txt in this repo; hash pyproject.toml instead so the
+          # pip cache key resolves (otherwise setup-python errors "No file matched").
+          cache-dependency-path: pyproject.toml
+
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit
+
+      # `pip-audit .` resolves THIS project's declared dependencies in isolation
+      # (fastapi/uvicorn/pydantic + transitives) instead of auditing the whole
+      # runner environment, so the scan scope matches what we actually ship.
+      - name: pip-audit (project dependencies, isolated)
+        run: pip-audit --progress-spinner off --format json --output pip-audit.json .
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: pip-audit-report
+          path: pip-audit.json
+          if-no-files-found: warn

@@ -19,16 +19,19 @@ Production Ready is not approved because external GIS/API integration, persisten
 - Safety-first route scoring that never treats missing height, weight, or road restriction data as clear passage.
 - Markdown and CSV report generation with mandatory disclaimer and confirmation actions.
 - Optional `APP_API_KEY` bearer-token protection for API endpoints.
+- Continuous integration via GitHub Actions (`.github/workflows/ci.yml`): a blocking `quality` job (ruff, compileall, pytest, bandit, Node syntax check), a blocking `package` job (builds a non-editable wheel and asserts every served static asset — including the vendored Leaflet tree — is packaged, via `scripts/check_package_assets.py`), and an advisory `dependency-audit` job (`pip-audit .`, scoped to the project's declared dependencies, report uploaded as an artifact). The dev tooling is declared in `pyproject.toml` `[dev]` so `pip install -e ".[dev]"` reproduces the gate locally.
+- Fixed a packaging defect found during CI hardening: `package-data` used a non-recursive `static/*` glob that silently dropped `app/static/vendor/leaflet/**` from the wheel, which would have broken the route map on `pip install .` (Docker) deployments. Now `static/**/*`; the `package` CI job guards against regressions.
 - Unit, API flow, and knowledge tests, plus a jsdom render harness for the UI runtime.
 - Two deployment paths on distinct ports so they can coexist: a user systemd service (`0.0.0.0:18017`) and a Docker image / `docker-compose.yml` (host `28080` → container `8000`, non-root, with a container healthcheck). `pyproject.toml` now declares a build-system and the `app` package so `pip install .` is deterministic.
 
 ## Validation Results
 
-- `pytest -q`: passed, 11 tests.
+- `pytest -q`: passed, 12 tests.
 - `ruff check .`: passed.
 - `python3 -m compileall app tests`: passed.
 - `bandit -q -r app`: passed.
-- `pip-audit .`: passed, no known vulnerabilities found.
+- `pip-audit .` (project dependencies, isolated): passed, no known vulnerabilities. Note: `pip-audit .` resolves only this project's declared deps (`fastapi`/`uvicorn`/`pydantic` + transitives); a bare `pip-audit` would instead audit the whole ambient environment. Runs as an advisory (non-blocking) CI job.
+- Wheel packaging: `python -m build --wheel` + `scripts/check_package_assets.py`: passed, all 9 required static assets (including vendored Leaflet) present.
 - `node --check` on `dc-runtime.js`, `component.js`, `app.js`: passed.
 - jsdom render harness: all 9 screens render with no exceptions, no unresolved `{{ }}` bindings, and no leftover `sc-*` tags; SVG elements land in the SVG namespace; nav transitions, layer toggles, route/hazard selection, the knowledge search round-trip, and text-input focus preservation all pass.
 - jsdom map harness (Leaflet stubbed): the map is created once and reused across re-renders and screen switches (the `data-keep` node keeps its identity); route polylines and hazard markers render; `fitBounds` runs on route change but not on layer toggles; a hazard marker click drives `selectHazard`.

@@ -3,6 +3,7 @@
 > 土木・建設工事における **資材搬入・重機回送ルートの初期検討** を支援する MVP です。<br>
 > 現場条件、車両諸元、搬入時間帯を入力し、複数の搬入ルート候補、注意箇所、追加確認先、Markdown/CSV レポートを生成します。
 
+[![CI](https://github.com/Kensan196948G/Construction-Logistics-Route-Planner/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kensan196948G/Construction-Logistics-Route-Planner/actions/workflows/ci.yml)
 ![Status](https://img.shields.io/badge/status-MVP-orange)
 ![API](https://img.shields.io/badge/API-FastAPI-009688)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
@@ -277,11 +278,26 @@ CSV は、案件 ID、ルート ID、距離、時間、リスクレベル、リ�
 
 ## 🧪 検証
 
+ローカルの品質ゲートは、**GitHub Actions CI（`.github/workflows/ci.yml`）と同一**です。`pip install -e ".[dev]"` 後に以下を実行できます。
+
 ```bash
-pytest                              # API + リスク評価 + ナレッジ検索（12 tests）
 ruff check .                        # lint
 python3 -m compileall app tests     # 構文・バイトコード確認
+pytest                              # API + リスク評価 + ナレッジ検索（12 tests）
+bandit -q -r app                    # コードセキュリティスキャン
+for f in app.js component.js dc-runtime.js; do node --check "app/static/$f"; done  # クライアント構文確認
+python -m build --wheel && python scripts/check_package_assets.py  # 配布物に静的アセット全同梱を検証
 ```
+
+| 🔁 CI ジョブ | 内容 | ブロッキング |
+|---|---|---|
+| `quality` | ruff / compileall / pytest / bandit / node --check | ✅ 必須（失敗で merge 不可） |
+| `package` | wheel ビルド + 静的アセット同梱検証（`scripts/check_package_assets.py`） | ✅ 必須 |
+| `dependency-audit` | `pip-audit .`（プロジェクト依存のみ）＋ JSON レポートを artifact 保存 | ⚠️ advisory（推移的依存の CVE churn で無関係 PR を止めないため非ブロッキング） |
+
+> **`package` ジョブの意義**: editable install（`pip install -e`）はソースツリーから直接 import するため、`pip install .`（Docker デプロイ経路）で wheel に同梱され損ねる `package-data` の取りこぼしを検出できません。非 editable な wheel を実ビルドして vendored Leaflet を含む全アセットの存在を検証します。
+>
+> **`pip-audit` のスコープ**: `pip-audit .`（プロジェクトパス指定）は **宣言依存（fastapi / uvicorn / pydantic とその推移）のみ** を隔離解決して監査します。`pip-audit` を引数なしで実行すると現在の環境全体（pip-audit 自身の依存を含む）を監査してしまうため、必ずパス指定を使ってください。
 
 UI ランタイム（`dc-runtime.js`）は、9 画面の描画・`sc-if` / `sc-for` 展開・イベント配線・SVG 名前空間・入力フォーカス保持を jsdom ベースのハーネスで確認しています。この環境では Chromium が即時終了するため、ブラウザでのスクリーンショット検証は未実施です（[MVP の制約](#-mvp-の制約)）。
 
