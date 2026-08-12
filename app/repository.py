@@ -1,19 +1,35 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db_models import (
     AuditLog,
+)
+from app.db_models import (
     Project as DBProject,
+)
+from app.db_models import (
     ProjectLocation as DBProjectLocation,
+)
+from app.db_models import (
     Report as DBReport,
+)
+from app.db_models import (
     RiskComment as DBRiskComment,
+)
+from app.db_models import (
     RouteCandidate as DBRouteCandidate,
+)
+from app.db_models import (
     RouteRisk as DBRouteRisk,
+)
+from app.db_models import (
     RouteSegment as DBRouteSegment,
+)
+from app.db_models import (
     VehicleCondition as DBVehicleCondition,
 )
 from app.models import (
@@ -30,7 +46,7 @@ from app.models import (
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _db_project_to_pydantic(db: DBProject) -> Project:
@@ -442,7 +458,7 @@ def _confirmation_carry_map(risks: list[DBRouteRisk]) -> dict[tuple, dict]:
         )
         latest_comment = None
         if risk.comments:
-            latest_comment = sorted(risk.comments, key=lambda c: c.created_at or _utcnow())[-1]
+            latest_comment = max(risk.comments, key=lambda c: c.created_at or _utcnow())
         carry[key] = {
             "status": risk.confirmation_status,
             "comment": latest_comment.comment if latest_comment else "",

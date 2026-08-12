@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import csv
 import logging
-from io import BytesIO
-from io import StringIO
+from io import BytesIO, StringIO
 
-from app.models import DISCLAIMER, SAMPLE_DATA_NOTICE, Project, RouteCandidate, RiskLevel
+from app.models import (
+    DISCLAIMER,
+    SAMPLE_DATA_NOTICE,
+    Project,
+    RiskLevel,
+    RouteCandidate,
+)
 from app.risk_engine import risk_counts
 
 logger = logging.getLogger(__name__)
@@ -184,7 +189,13 @@ def render_pdf(project: Project, routes: list[RouteCandidate]) -> bytes:
     from reportlab.lib.units import mm
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import (
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
 
     try:
         pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))

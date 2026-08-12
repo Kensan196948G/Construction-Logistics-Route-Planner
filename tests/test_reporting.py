@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.models import (
     DISCLAIMER,
@@ -24,7 +24,7 @@ from app.models import (
 )
 from app.reporting import render_csv, render_markdown
 
-NOW = datetime(2026, 6, 20, tzinfo=timezone.utc)
+NOW = datetime(2026, 6, 20, tzinfo=UTC)
 
 
 def _project() -> Project:

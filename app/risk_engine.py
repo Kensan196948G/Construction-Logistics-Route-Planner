@@ -16,7 +16,6 @@ from app.models import (
     now_utc,
 )
 
-
 ROUTE_LABELS = {
     RouteType.shortest: "候補A 距離優先",
     RouteType.fastest: "候補B 時間優先",

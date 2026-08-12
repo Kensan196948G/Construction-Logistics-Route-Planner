@@ -29,9 +29,9 @@ from app.models import (
     LocationInput,
     Project,
     ProjectCreate,
+    ReportResponse,
     RiskConfirmRequest,
     RiskConfirmResponse,
-    ReportResponse,
     RouteCandidate,
     RouteFeature,
     RouteGenerateRequest,
@@ -56,7 +56,6 @@ from app.repository import (
 )
 from app.risk_engine import evaluate_route, generate_routes, risk_counts
 from app.routing import fetch_osrm_routes
-
 
 app = FastAPI(
     title="Construction Logistics Route Planner",
@@ -146,13 +145,13 @@ async def _db_healthy() -> tuple[bool, str]:
         return True, "ok"
     except TimeoutError:
         return False, "timeout"
-    except Exception:
+    except Exception:  # noqa: BLE001 - best-effort probe; any failure means "db error"
         return False, "error"
 
 
 @app.get("/api/health")
 async def health() -> dict[str, object]:
-    db_ok, db_status = await _db_healthy()
+    _, db_status = await _db_healthy()
     return {
         "status": "ok",
         "service": "construction-logistics-route-planner",

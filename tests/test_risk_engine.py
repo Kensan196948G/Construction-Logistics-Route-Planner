@@ -1,4 +1,11 @@
-from app.models import DeliveryCondition, EvaluationRequest, LocationInput, Project, VehicleCondition, now_utc
+from app.models import (
+    DeliveryCondition,
+    EvaluationRequest,
+    LocationInput,
+    Project,
+    VehicleCondition,
+    now_utc,
+)
 from app.risk_engine import evaluate_route, generate_routes
 
 

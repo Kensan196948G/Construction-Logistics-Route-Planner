@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
-
 
 DISCLAIMER = (
     "本システムは、公開データに基づく搬入ルートの初期検討支援ツールです。"
@@ -270,4 +269,4 @@ def new_id(prefix: str) -> str:
 
 
 def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)

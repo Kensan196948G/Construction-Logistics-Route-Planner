@@ -118,7 +118,7 @@ async def test_site_user_can_confirm_but_not_approve(client: AsyncClient, monkey
 async def test_re_evaluation_preserves_risk_confirmation(client: AsyncClient) -> None:
     """Re-evaluating a route must not silently discard confirmation results."""
 
-    project_id, refs = await _evaluated_project(client)
+    _project_id, refs = await _evaluated_project(client)
 
     confirmed = await client.post(
         f"/api/routes/{refs['route_id']}/risks/{refs['risk_id']}/confirm",

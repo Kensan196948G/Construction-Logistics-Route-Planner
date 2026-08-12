@@ -6,7 +6,6 @@ import pytest
 from app.models import LocationInput, RouteType
 from app.routing import fetch_osrm_routes
 
-
 START = LocationInput(name="出発地", lat=35.681236, lng=139.767125)
 DEST = LocationInput(name="到着地", lat=35.658581, lng=139.745433)
 
