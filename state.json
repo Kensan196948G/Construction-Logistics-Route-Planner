@@ -73,6 +73,6 @@
   },
   "last_session": {
     "date": "2026-08-12",
-    "summary": "本番運用水準の総合評価と改善: 認証フェイルクローズ（PRODUCTION_MODE）、タイミングセーフなAPIキー比較、Entra JWKS TTL+再取得、セキュリティヘッダー・CSP、ナレッジ検索レートリミット、CSV数式インジェクション対策、リスク確認ステータスの再評価引き継ぎ、ルート世代管理（重複防止）、搬入/回避条件のDB永続化、owner_user_id記録、監査ログCSVエクスポート、DB健全性のhealth反映、include_sources/buffer_mの評価パラメータ実接続、featurelessリスクの500回帰修正、UIの提出/承認/ダウンロード/APIキー実動作を実装。pytest 49件+Node 13件成功、実サーバースモーク成功。xROAD/KSJ/PLATEAU実連携・Excel・実ブラウザE2E・Entra IDテナント設定は次フェーズ。"
+    "summary": "本番運用水準の総合評価と改善: 認証フェイルクローズ（PRODUCTION_MODE）、タイミングセーフなAPIキー比較、Entra JWKS TTL+再取得、セキュリティヘッダー・CSP、ナレッジ検索レートリミット、CSV数式インジェクション対策、リスク確認ステータスの再評価引き継ぎ、ルート世代管理（重複防止）、搬入/回避条件のDB永続化、owner_user_id記録、監査ログCSVエクスポート、DB健全性のhealth反映、include_sourcesの評価フィルタ実装・サンプル地物の品質ランクE化、UIの提出/承認/ダウンロード/APIキー実動作を実装。pytest 49件+Node 13件成功、実サーバースモーク成功。xROAD/KSJ/PLATEAU実連携・Excel・実ブラウザE2E・Entra IDテナント設定は次フェーズ。"
   }
 }
