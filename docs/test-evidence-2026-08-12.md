@@ -12,14 +12,14 @@
 |---|---|---:|---|
 | lint | `ruff check .` | PASS | 0 指摘 |
 | 構文 | `python -m compileall -q app tests` | PASS | — |
-| 単体/統合/API/E2E | `python -m pytest` | PASS | 46 |
+| 単体/統合/API/E2E | `python -m pytest` | PASS | 49 |
 | コードセキュリティ | `bandit -q -r app` | PASS | 0 |
 | クライアント構文 | `node --check`（app.js/component.js/dc-runtime.js） | PASS | 3 |
 | クライアント動作 | `node tests/js/route_screen.test.mjs` | PASS | 13 |
 | wheel ビルド | `python -m build --wheel` | PASS | — |
 | アセット同梱 | `python scripts/check_package_assets.py` | PASS | 9/9 |
 | 依存脆弱性 | `pip-audit .` | PASS | 0 |
-| マイグレーション | `alembic upgrade head`（SQLite） | PASS | 3 リビジョン適用 |
+| マイグレーション | `alembic upgrade head`（SQLite） | PASS | 4 リビジョン適用（initial / postgis / generation / delivery+indexes） |
 
 ## 新規・更新テストの内容
 
@@ -30,6 +30,9 @@
 | tests/test_workflow.py | 再評価時の確認ステータス引き継ぎ、再生成時の最新世代のみ表示（重複なし） |
 | tests/test_persistence.py | 搬入/回避条件の往復永続化、owner_user_id 記録、レポート自動評価の永続化、health の DB 状態、監査 CSV エクスポートの権限と形式 |
 | tests/test_reporting.py | CSV 数式インジェクション中和（= + @） |
+| tests/test_adapters.py | サンプル地物の品質ランク E・sample フラグ（実データと区別） |
+| tests/test_risk_engine.py | include_sources による評価対象フィルタ、サンプルランク E |
+| tests/test_api.py | feature なしリスク（高さ・重量未入力）の DB ラウンドトリップ（500 回帰防止） |
 | tests/js/route_screen.test.mjs | 表示レベル対応、_geoInv 逆変換、confirmRisk の Authorization/body、testApi の /api/me 検証、未選択案件の DL エラー、submitProject |
 
 ## 実サーバースモーク（uvicorn + 一時 SQLite、ポート 18099）
@@ -47,6 +50,9 @@
 | GET /report?format=csv | 200（行・免責・サンプル注意含む） |
 | セキュリティヘッダー | nosniff / DENY / no-referrer / CSP 付与確認 |
 | GET /api/health | db.status=ok、dialect=sqlite |
+| POST /routes/generate（buffer_m=500） | 200（取得半径パラメータの実接続） |
+| POST /routes/{id}/evaluate（include_sources=["osm"]） | 200（指定ソースのみ評価、feature なしリスク 2 件 feature:null） |
+| GET /api/routes/{id}（車両諸元未入力案件） | 200（featureless リスク 500 の回帰確認） |
 
 ## 実行できなかった検証（NOT RUN / BLOCKED）
 

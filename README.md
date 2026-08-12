@@ -353,7 +353,7 @@ CSV は、案件 ID、ルート ID、距離、時間、リスクレベル、リ�
 ```bash
 ruff check .                        # lint
 python3 -m compileall app tests     # 構文・バイトコード確認
-pytest                              # API + 認証 + ワークフロー + 永続化 + ルーティング + 帳票 + E2E（46 tests）
+pytest                              # API + 認証 + ワークフロー + 永続化 + ルーティング + 帳票 + E2E（49 tests）
 bandit -q -r app                    # コードセキュリティスキャン
 for f in app.js component.js dc-runtime.js; do node --check "app/static/$f"; done  # クライアント構文確認
 node tests/js/route_screen.test.mjs # クライアント動作テスト（13 tests）

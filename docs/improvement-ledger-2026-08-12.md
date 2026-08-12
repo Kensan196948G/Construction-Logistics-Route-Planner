@@ -52,8 +52,8 @@
 | 基準 | 結果 |
 |---|---|
 | 重大リスクの解消または明示的な受容・課題化 | データ消失は修正。実データ未連携は「本番利用禁止」明示で受容・課題化 |
-| 変更範囲の CI | ローカル品質ゲート全成功（46 pytest / 13 node / ruff / bandit / compile / build 予定） |
-| 主要テスト・ビルド | pytest 46 passed、Node 13 passed、wheel ビルド確認 |
+| 変更範囲の CI | ローカル品質ゲート全成功（49 pytest / 13 node / ruff / bandit / compile / build） |
+| 主要テスト・ビルド | pytest 49 passed、Node 13 passed、wheel ビルド確認 |
 | データ移行 | Alembic upgrade head 適用（state.db）・downgrade テスト |
 | バックアップ・復旧 | backup_db.sh / restore_db.sh 実動作確認（SQLite） |
 | 検証環境の主要フロー | 入力→生成→評価→Markdown/PDF→提出→RBAC 403 を API スモークで確認 |

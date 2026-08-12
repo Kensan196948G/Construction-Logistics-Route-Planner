@@ -69,7 +69,7 @@ plus dashboard/admin real-data views and API-key bearer support.
 
 ## Validation Results
 
-- `pytest -q`: passed, 46 Python tests (API, auth, workflow, persistence, routing, adapters, reporting, knowledge, migrations, E2E).
+- `pytest -q`: passed, 49 Python tests (API, auth, workflow, persistence, routing, adapters, reporting, knowledge, migrations, E2E).
 - `ruff check .`: passed.
 - `python3 -m compileall app tests`: passed.
 - `bandit -q -r app`: passed (0 issues).

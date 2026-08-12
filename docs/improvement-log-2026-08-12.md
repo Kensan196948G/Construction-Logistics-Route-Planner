@@ -21,7 +21,7 @@
 | 17 | 中 | データ品質 | レポート出力前に未評価ルートを評価・永続化 | 帳票と DB の評価状態が不一致 | 技術者 | 帳票整合 | 低 | 0.3h | 完了 | tests/test_persistence.py |
 | 18 | 中 | 性能 | FK 参照インデックス 12 本を移行で追加 | 一覧・監査・リスク取得のテーブルフルスキャン回避 | 全利用者 | 応答性能 | 低 | 0.5h | 完了 | alembic upgrade 成功 |
 | 19 | 中 | 運用 | .opencode/ を Git 管理対象外に変更（.gitignore） | ローカルツール状態の混入防止 | IT/DX | リポジトリ衛生 | 低 | 0.1h | 完了 | git status |
-| 20 | 中 | 文書 | README/SECURITY/RELEASE_READINESS/state.json を実装と整合（ロール数 4、テスト 46+13、本番モード説明、Worker 設定） | 文書と実装の乖離 | 全員 | 運用・監査の正確性 | 低 | 1.5h | 完了 | レビュー |
+| 20 | 中 | 文書 | README/SECURITY/RELEASE_READINESS/state.json を実装と整合（ロール数 4、テスト 49+13、本番モード説明、Worker 設定） | 文書と実装の乖離 | 全員 | 運用・監査の正確性 | 低 | 1.5h | 完了 | レビュー |
 | 21 | 中 | CI | 失敗済み stale Dependabot PR（actions/checkout@7.0.1、setup-python@7.0.0）をクローズ | 存在しないバージョンへの更新は CI を壊すだけ | IT/DX | CI 状態の正常化 | 低 | 0.2h | 完了 | gh pr checks |
 | 22 | 中 | 監視 | docs/monitoring.md にレートリミット・セキュリティヘッダーの確認項目を追記 | 監視項目の抜け | IT/DX | 運用品質 | 低 | 0.3h | 完了 | レビュー |
 

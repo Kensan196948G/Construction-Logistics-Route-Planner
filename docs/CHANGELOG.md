@@ -16,7 +16,7 @@
 - UI: レビュー依頼（提出）・承認ボタン、ダッシュボード/管理画面の実データ表示
 - UI: API キーの sessionStorage 保存と Authorization ヘッダ、/api/me 接続テスト
 - UI: デモ・未対応項目の明示（経由地未対応、辞書サンプル、ZIP 次フェーズ、AI 表示是正）
-- テスト: 46 Python + 13 Node（永続化・RBAC・監査 CSV・saveAndGenerate・submitProject 等を追加）
+- テスト: 49 Python + 13 Node（永続化・RBAC・監査 CSV・featureless リスク回帰・include_sources・saveAndGenerate・submitProject 等を追加）
 - 文書: 評価報告書・改善台帳・テスト証跡・CHANGELOG 追加、README/RELEASE_READINESS 整合
 
 ### 先行作業の継承（2026-08-12 作業ツリー）
