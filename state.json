@@ -25,22 +25,23 @@
     "self_evolution": true
   },
   "completed_issues": [
-    "Implement Route Planner.dc.html as a 9-screen SPA over the FastAPI backend",
-    "Add self-contained dc-runtime.js interpreting the design-component dialect",
-    "Add deterministic safety-first knowledge search endpoint with tests",
-    "Add SQLAlchemy async ORM with 14-table schema + Alembic migrations",
-    "Add OIDC/Entra ID authentication with API key fallback + role-based access control",
-    "Add durable audit logging to audit_logs table",
-    "Add external API adapter layer (OSM, xROAD, PLATEAU, KSI stubs)",
-    "Add Cloudflare deployment configuration (wrangler.toml, worker.js, deploy script)",
-    "Add WebUI live API integration with loading/empty/error states",
-    "Add operations documentation (6 docs: operations, incident-response, rollback, deployment, backup-restore, monitoring)"
+    "Production-readiness evaluation (18 categories, before/after) + competitor comparison + replacement-rate analysis",
+    "Fail-closed production auth, timing-safe API key compare, Entra JWKS TTL/refresh",
+    "Security headers/CSP, knowledge-search rate limit, CSV formula-injection protection",
+    "Delivery/avoid persistence, owner_user_id recording, user upsert for PostgreSQL FK",
+    "Route generation versioning + risk confirmation carry-over across re-evaluations",
+    "DB-aware /api/health, audit-log CSV export, monitor.sh DB check",
+    "Sample features ranked E + sample flag; include_sources evaluation filter",
+    "UI core flow wired to APIs (input/generate/evaluate/confirm/submit/approve/report download)",
+    "Restore drill, live DB migration to head, systemd verification-env smoke",
+    "Evaluation report, improvement ledger, test evidence, roadmap, CHANGELOG updates"
   ],
   "blocked_issues": [
-    "Cloudflare deployment: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID pending",
-    "Neon PostgreSQL provisioning: Neon API key pending",
-    "Entra ID tenant configuration: ENTRA_TENANT_ID + ENTRA_CLIENT_ID pending",
-    "External API keys: xROAD, PLATEAU, KSI pending"
+    "Cloudflare deployment: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID pending (#21)",
+    "Neon PostgreSQL provisioning: Neon API key pending (#19)",
+    "Entra ID tenant configuration: ENTRA_TENANT_ID + ENTRA_CLIENT_ID pending (#20)",
+    "External API keys: xROAD, PLATEAU, KSI pending (#24)",
+    "Browser E2E environment: Chromium SIGTRAP locally, Playwright in CI pending (#22)"
   ],
   "learning": {
     "failure_patterns": [
