@@ -18,6 +18,19 @@
     // Props mirror the design-component defaults (accent colour + initial screen).
     var component = new Component({ accent: '#ff6a00', defaultScreen: 'dashboard' });
     component.mount(template, mount);
+    // Load the real project list when the API is reachable; the screen falls
+    // back to demo data on failure.
+    if (typeof component.fetchProjects === 'function') {
+      component.fetchProjects();
+    }
+    // Admin views (data sources + audit log) load lazily too; they fall back to
+    // demo rows when the API is unreachable or the caller is not an admin.
+    if (typeof component.fetchDataSources === 'function') {
+      component.fetchDataSources();
+    }
+    if (typeof component.fetchAuditLogs === 'function') {
+      component.fetchAuditLogs();
+    }
 
     // Confirm backend reachability; record it for diagnostics without altering
     // the faithful prototype visuals. Failures degrade gracefully (offline demo).

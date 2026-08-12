@@ -138,6 +138,162 @@ await test("runKnowledgeSearch drops a stale result when the query changed mid-f
   assert.equal(c.state.kSearching, false, "loading state must be cleared");
 });
 
+await test("levelMeta maps the backend exclusion_consideration level", () => {
+  const c = new Component();
+  assert.equal(c.levelMeta("exclusion_consideration").label, "除外検討");
+});
+
+await test("_geoInv inverts _geo", () => {
+  const c = new Component();
+  const [x, y] = c._geoInv(35.65, 139.75);
+  const [lat, lng] = c._geo(x, y);
+  assert.ok(Math.abs(lat - 35.65) < 1e-9, "latitude round-trip");
+  assert.ok(Math.abs(lng - 139.75) < 1e-9, "longitude round-trip");
+});
+
+await test("confirmRisk posts status with the configured API key", async () => {
+  let captured;
+  const { Component: C } = loadComponent({
+    fetch: (url, opts) => {
+      captured = { url, opts };
+      return Promise.resolve({ ok: true, json: async () => ({ status: "confirmed" }) });
+    },
+  });
+  const c = new C();
+  c.state = Object.assign({}, c.state, { apiKey: "test-key-123", riskComment: "現地確認済み" });
+  await c.confirmRisk("route-1", "risk-1", "confirmed");
+  assert.equal(captured.url, "/api/routes/route-1/risks/risk-1/confirm");
+  assert.equal(captured.opts.headers.Authorization, "Bearer test-key-123");
+  const body = JSON.parse(captured.opts.body);
+  assert.equal(body.status, "confirmed");
+  assert.equal(body.comment, "現地確認済み");
+});
+
+await test("testApi verifies the key against /api/me", async () => {
+  let capturedUrl;
+  const { Component: C } = loadComponent({
+    fetch: (url) => {
+      capturedUrl = url;
+      return Promise.resolve({ ok: true });
+    },
+  });
+  const c = new C();
+  c.state = Object.assign({}, c.state, { apiKey: "test-key-123" });
+  await c.testApi();
+  assert.equal(capturedUrl, "/api/me");
+  assert.equal(c.state.apiStatus, "ok");
+});
+
+await test("downloadReport without a selected project shows a clear error", async () => {
+  const { Component: C } = loadComponent({ fetch: () => Promise.resolve({ ok: true }) });
+  const c = new C();
+  c.state = Object.assign({}, c.state, { activeProjectId: null });
+  await c.downloadReport("markdown");
+  assert.ok(c.state.apiError.includes("案件を選択"), "must tell the user to select a project");
+});
+
+await test("createProject posts delivery, avoid, vehicle and owner fields", async () => {
+  const posts = [];
+  const { Component: C } = loadComponent({
+    fetch: (url, opts) => {
+      if (opts && opts.method === "POST") posts.push({ url, opts });
+      return Promise.resolve({ ok: true, json: async () => ({ id: "prj_created" }) });
+    },
+  });
+  const c = new C();
+  c.state = Object.assign({}, c.state, {
+    apiKey: "test-key-123",
+    timeWindow: "morning_peak",
+    nightAllowed: true,
+    avoid: { school: true, residential: false, crossing: true, slope: false, narrow: false },
+    projectForm: {
+      project_name: "検証工事", site_name: "検証現場", planner: "qa",
+      start_name: "出発地", start_lat: "35.68", start_lng: "139.76",
+      dest_name: "到着地", dest_lat: "35.65", dest_lng: "139.74",
+      length_m: "12.0", width_m: "2.5", height_m: "3.8", gross_weight_t: "28.0",
+      axle_weight_t: "10.0", cargo_type: "PCa部材", special_vehicle: true,
+      delivery_date: "2026-09-01", notes: "テスト", time_window: "daytime"
+    },
+    clientType: "public"
+  });
+  const created = await c.createProject();
+  assert.equal(created.id, "prj_created");
+  const post = posts.find(p=>p.url === "/api/projects");
+  assert.ok(post, "create POST must be issued");
+  assert.equal(post.opts.headers.Authorization, "Bearer test-key-123");
+  const body = JSON.parse(post.opts.body);
+  assert.equal(body.delivery.time_window, "morning_peak");
+  assert.equal(body.delivery.night_delivery_allowed, true);
+  assert.deepEqual(body.avoid_conditions, ["schools", "rail_crossings"]);
+  assert.equal(body.vehicle.special_vehicle_flag, true);
+  assert.equal(body.owner_type, "public");
+  assert.equal(body.vehicle.gross_weight_t, 28.0);
+});
+
+await test("saveAndGenerate creates the project then generates and evaluates routes", async () => {
+  const calls = [];
+  const { Component: C } = loadComponent({
+    fetch: (url, opts) => {
+      calls.push(url);
+      if (url === "/api/projects" && opts && opts.method === "POST") {
+        return Promise.resolve({ ok: true, json: async () => ({ id: "prj_1" }) });
+      }
+      if (url === "/api/projects/prj_1/routes/generate") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            routes: [
+              { id: "r1", route_type: "shortest", name: "候補A", distance_km: 1.2, duration_min: 5, risk_level: "pending", risk_score: 0, geometry: [] },
+            ],
+          }),
+        });
+      }
+      if (url === "/api/routes/r1/evaluate") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ risk_level: "caution", risk_score: 10, summary: "評価済み", risk_counts: { caution: 1 }, risks: [] }),
+        });
+      }
+      if (url === "/api/projects") {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    },
+  });
+  const c = new C();
+  c.state = Object.assign({}, c.state, {
+    projectForm: Object.assign({}, c.state.projectForm, {
+      project_name: "検証工事", site_name: "現場", planner: "qa",
+      start_name: "出発", dest_name: "到着"
+    })
+  });
+  await c.saveAndGenerate();
+  assert.ok(calls.includes("/api/projects/prj_1/routes/generate"), "route generation must be called");
+  assert.ok(calls.includes("/api/routes/r1/evaluate"), "evaluation must be called for each route");
+  assert.equal(c.state.activeProjectId, "prj_1");
+  assert.ok(c.state.apiRoutes && c.state.apiRoutes.length === 1);
+  assert.equal(c.state.screen, "routes");
+});
+
+await test("submitProject posts a review request for the active project", async () => {
+  const posts = [];
+  const { Component: C } = loadComponent({
+    fetch: (url, opts) => {
+      if (opts && opts.method === "POST") posts.push({ url, opts });
+      if (url === "/api/projects") return Promise.resolve({ ok: true, json: async () => [] });
+      return Promise.resolve({ ok: true, json: async () => ({ status: "review_required" }) });
+    },
+  });
+  const c = new C();
+  c.state = Object.assign({}, c.state, { activeProjectId: "prj_9", apiKey: "test-key-123" });
+  await c.submitProject();
+  const post = posts.find(p=>p.url === "/api/projects/prj_9/submit");
+  assert.ok(post, "submit POST must be issued");
+  assert.equal(post.opts.method, "POST");
+  assert.equal(post.opts.headers.Authorization, "Bearer test-key-123");
+  assert.ok(c.state.apiNotice.includes("レビュー依頼"), "success notice must be shown");
+});
+
 if (process.exitCode) {
   console.error(`\n${passed} passed, with failures.`);
 } else {

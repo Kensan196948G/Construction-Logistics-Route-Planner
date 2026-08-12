@@ -3,10 +3,42 @@
 ## Scope
 
 This project is an internal-MVP route-risk review tool. It ships a FastAPI
-backend and a static single-page UI. It has no persistence, no enterprise
-authentication, and an optional `APP_API_KEY` bearer guard only (see
-`RELEASE_READINESS.md`). Treat deployments as internal/evaluation, behind a
-trusted network, until the production-hardening roadmap items land.
+backend and a static single-page UI with persistent storage (SQLite by default,
+PostgreSQL when `DATABASE_URL` is set), Alembic migrations, a durable
+`audit_logs` table, and two authentication modes: Entra ID / OIDC JWT
+validation, or an `APP_API_KEY` bearer guard as fallback.
+
+**Current deployments are PoC/sample mode and must not be used for production
+decisions.** Routes and risk features are sample-generated; the UI and reports
+display a persistent "本番利用禁止（PoC・サンプル）" notice. Set
+`PRODUCTION_MODE=1` only after real data integration is complete.
+
+In API-key mode, audit identity is derived from deployment configuration
+(`APP_API_KEY_USER_ID` / `APP_API_KEY_USER_ROLE`), never from client-supplied
+`x-user-id` / `x-user-role` headers, which are spoofable. Public exposure still
+requires TLS and an access-controlled front (reverse proxy / VPN / Cloudflare
+Access); the application itself does not terminate TLS.
+
+## Fail-Closed Production Mode
+
+`PRODUCTION_MODE=1` turns authentication fail-closed:
+
+- Without `APP_API_KEY` **and** without `ENTRA_TENANT_ID`/`ENTRA_CLIENT_ID`,
+  every protected API returns 503 (`Authentication is not configured`) rather
+  than allowing open access.
+- `ENTRA_TENANT_ID` without `ENTRA_CLIENT_ID` also returns 503 (misconfiguration
+  is surfaced, never silently downgraded).
+- API-key comparison uses `hmac.compare_digest` (timing-safe), and Entra JWKS
+  are cached with a TTL and refreshed on key rotation (kid miss).
+
+## Output Hardening
+
+- CSV exports (reports and audit logs) neutralize spreadsheet formula injection
+  by prefixing `'` to cells starting with `=`, `+`, `-`, `@`, tab, or CR.
+- All responses include security headers (CSP, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`).
+- The public knowledge-search endpoint is rate-limited per client IP
+  (30 requests/minute, HTTP 429).
 
 ## Reporting a Vulnerability
 

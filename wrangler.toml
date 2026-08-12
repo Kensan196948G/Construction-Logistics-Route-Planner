@@ -1,0 +1,26 @@
+name = "construction-logistics-route-planner"
+main = "cloudflare/worker.js"
+compatibility_date = "2026-07-18"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "mirai-dx-platform.com/api/*", zone_name = "mirai-dx-platform.com" }
+]
+
+[env.production]
+routes = [
+  { pattern = "mirai-dx-platform.com/api/*", zone_name = "mirai-dx-platform.com" }
+]
+
+[env.production.vars]
+# The FastAPI backend's public HTTPS URL (e.g. https://route-planner-api.example.com).
+# Set via Cloudflare dashboard/CI secret, never commit a real value here.
+BACKEND_ORIGIN = ""
+
+[env.staging]
+routes = [
+  { pattern = "staging.mirai-dx-platform.com/api/*", zone_name = "mirai-dx-platform.com" }
+]
+
+[env.staging.vars]
+BACKEND_ORIGIN = ""

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
-
 
 DISCLAIMER = (
     "本システムは、公開データに基づく搬入ルートの初期検討支援ツールです。"
@@ -14,6 +13,12 @@ DISCLAIMER = (
     "道路使用許可、道路占用許可、現地安全性を保証するものではありません。"
     "最終判断には、道路管理者、警察、発注者、協力会社、現地確認等による"
     "追加確認を行ってください。"
+)
+
+SAMPLE_DATA_NOTICE = (
+    "【PoC・サンプル】表示中のルート、橋梁・トンネル・学校・病院・交通量・"
+    "災害リスクなどの地物は実データではなくサンプル生成です。本番計画・"
+    "通行可否・許認可の判断には使用しないでください（本番利用禁止）。"
 )
 
 
@@ -97,7 +102,14 @@ class ProjectCreate(BaseModel):
 
 class Project(ProjectCreate):
     id: str
-    status: Literal["draft", "evaluating", "review_required", "reviewed", "archived"] = "draft"
+    status: Literal[
+        "draft",
+        "evaluating",
+        "review_required",
+        "change_requested",
+        "reviewed",
+        "archived",
+    ] = "draft"
     created_at: datetime
     updated_at: datetime
 
@@ -114,6 +126,7 @@ class RouteGenerateRequest(BaseModel):
         max_length=5,
     )
     avoid_points: list[AvoidPoint] = Field(default_factory=list, max_length=20)
+    buffer_m: int = Field(default=300, ge=50, le=1000)
 
     @field_validator("route_types")
     @classmethod
@@ -155,6 +168,7 @@ class RiskItem(BaseModel):
     feature: RouteFeature | None = None
     confirmation_target: str
     evidence: str
+    confirmation_status: Literal["unconfirmed", "confirmed", "needs_review", "not_applicable"] = "unconfirmed"
 
 
 class RouteCandidate(BaseModel):
@@ -177,6 +191,8 @@ class RouteGenerateResponse(BaseModel):
     project_id: str
     generated_count: int
     routes: list[RouteCandidate]
+    mode: Literal["sample", "sample+osm", "osrm", "osrm+osm"] = "sample"
+    notes: list[str] = Field(default_factory=list)
 
 
 class EvaluationRequest(BaseModel):
@@ -196,9 +212,26 @@ class EvaluationResponse(BaseModel):
     risks: list[RiskItem]
 
 
+class RiskConfirmRequest(BaseModel):
+    status: Literal["confirmed", "needs_review", "not_applicable"]
+    comment: str = Field(..., min_length=1, max_length=2000)
+
+
+class RiskConfirmResponse(BaseModel):
+    risk_id: str
+    status: str
+    confirmed_by: str
+    comment: str
+    confirmed_at: datetime
+
+
+class WorkflowRequest(BaseModel):
+    comment: str | None = Field(default=None, max_length=2000)
+
+
 class ReportResponse(BaseModel):
     project_id: str
-    format: Literal["markdown", "csv"]
+    format: Literal["markdown", "csv", "pdf"]
     content: str
     generated_at: datetime
 
@@ -227,6 +260,7 @@ class KnowledgeSearchResponse(BaseModel):
     # mirroring the "信頼度 E · 要レビュー" badge in the UI.
     reliability: DataQuality = DataQuality.estimated
     disclaimer: str = DISCLAIMER
+    sample_data_notice: str = SAMPLE_DATA_NOTICE
     generated_at: datetime
 
 
@@ -235,4 +269,4 @@ def new_id(prefix: str) -> str:
 
 
 def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)

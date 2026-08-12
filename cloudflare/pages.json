@@ -1,0 +1,25 @@
+{
+  "name": "construction-logistics-route-planner-pages",
+  "description": "Cloudflare Pages deployment configuration for the Construction Logistics Route Planner SPA",
+  "pages": {
+    "static_dir": "app/static",
+    "build_command": null,
+    "framework": "none",
+    "routes": [
+      {
+        "pattern": "/*",
+        "fallback": "/index.html"
+      }
+    ],
+    "allowed_headers": [
+      "Authorization",
+      "Content-Type"
+    ]
+  },
+  "notes": {
+    "deployment": "app/static/ ディレクトリをそのまま Pages へデプロイ（ビルド不要）",
+    "api_proxy": "Pages から /api/* へのリクエストは Cloudflare Worker がバックエンドへ転送",
+    "custom_domain": "mirai-dx-platform.com (Pages ダッシュボードで設定)",
+    "env_vars": "Pages 側で環境変数設定は不要。認証は Worker 経由の Authorization ヘッダで行う"
+  }
+}
