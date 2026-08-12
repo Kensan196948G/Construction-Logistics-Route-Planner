@@ -67,6 +67,6 @@
 
 ## CI 状態
 
-- 作業ブランチ PR の CI（quality / package / dependency-audit）: push 後に確認予定
+- 作業ブランチ PR #18 の CI: **quality（lint/compile/pytest/bandit/node）・package・dependency-audit すべて成功**（2026-08-12 実測、run 31587672250）
 - main 上の CI 直近実績: success（2026-08-10 の Dependabot Updates 実行含む）
 - stale Dependabot PR #16（checkout@7.0.1）・#17（setup-python@7.0.0）は CI 失敗のためクローズ予定
