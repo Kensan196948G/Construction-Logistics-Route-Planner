@@ -30,6 +30,9 @@ from app.db_models import (
     RouteSegment as DBRouteSegment,
 )
 from app.db_models import (
+    User as DBUser,
+)
+from app.db_models import (
     VehicleCondition as DBVehicleCondition,
 )
 from app.models import (
@@ -271,6 +274,43 @@ async def create_project(
     _ = db_project.vehicle_condition
     _ = db_project.locations
     return _db_project_to_pydantic(db_project)
+
+
+async def ensure_user(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    display_name: str,
+    email: str | None,
+    role: str,
+) -> None:
+    """Upsert an authenticated user so project ownership FK holds on PostgreSQL.
+
+    SQLite does not enforce foreign keys by default, so the missing user row
+    only surfaced as a 500 on PostgreSQL (asyncpg ForeignKeyViolationError).
+    API-key and Entra identities must exist in ``users`` before a project can
+    reference ``owner_user_id``.
+    """
+
+    stmt = select(DBUser).where(DBUser.id == user_id)
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+    if existing is None:
+        session.add(
+            DBUser(
+                id=user_id,
+                display_name=display_name,
+                email=email,
+                role=role,
+            )
+        )
+        await session.commit()
+        return
+    if existing.role != role or existing.display_name != display_name:
+        existing.role = role
+        existing.display_name = display_name
+        if email:
+            existing.email = email
+        await session.commit()
 
 
 async def get_project(session: AsyncSession, project_id: str) -> Project | None:

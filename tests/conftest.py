@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db import Base, get_session
@@ -35,6 +36,15 @@ def event_loop():
 @pytest_asyncio.fixture
 async def engine():
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _enforce_foreign_keys(dbapi_connection, connection_record):
+        # Mirror PostgreSQL's FK enforcement so ownership/user bugs are caught
+        # in SQLite tests instead of only on the production database.
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine

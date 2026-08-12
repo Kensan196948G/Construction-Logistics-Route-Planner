@@ -44,6 +44,7 @@ from app.repository import (
     confirm_route_risk,
     create_audit_log,
     create_project,
+    ensure_user,
     get_project,
     get_project_routes,
     get_route,
@@ -180,6 +181,13 @@ async def api_create_project(
     session: DbSession,
     user: Annotated[UserInfo, Depends(get_current_user)],
 ) -> Project:
+    await ensure_user(
+        session,
+        user_id=user.user_id,
+        display_name=user.display_name,
+        email=user.email,
+        role=user.role,
+    )
     project = await create_project(session, payload, owner_user_id=user.user_id)
     await _audit(session, "project_created", project.id, request)
     return project

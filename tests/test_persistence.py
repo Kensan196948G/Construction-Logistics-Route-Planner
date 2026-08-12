@@ -72,6 +72,16 @@ async def test_delivery_and_avoid_conditions_round_trip(client: AsyncClient, ses
     assert db_project.delivery_date == date(2026, 9, 1)
     assert db_project.avoid_conditions == ["schools", "residential"]
 
+    # The authenticated identity must be upserted into users so the
+    # projects.owner_user_id foreign key holds on PostgreSQL.
+    from app.db_models import User as DBUser
+
+    db_user = (
+        await session.execute(select(DBUser).where(DBUser.id == "owner-123"))
+    ).scalar_one_or_none()
+    assert db_user is not None
+    assert db_user.role == "planner"
+
 
 @pytest.mark.asyncio
 async def test_report_auto_evaluation_is_persisted(client: AsyncClient) -> None:
