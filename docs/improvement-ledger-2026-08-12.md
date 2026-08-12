@@ -51,6 +51,7 @@
 | Cloudflare 本番デプロイ | CLOUDFLARE_API_TOKEN / ACCOUNT_ID 未提供 | scripts/deploy-cloudflare.sh 実行（本番承認後） |
 | xROAD / PLATEAU / KSI 実連携 | API キー・利用契約未締結 | 各提供元との契約 |
 | ブラウザ E2E | 本環境の Chromium が SIGTRAP で起動不能 | 別環境での Playwright 実行 |
+| GitHub Projects 状態更新 | リポジトリにクラシック Project なし。新 Projects はトークンに read:project スコープが無く 404/権限不足（「未接続」） | `gh auth refresh -s read:project,project` 後に更新 |
 | 本番デプロイ・マージ | CLAUDE.md の承認ゲート（マージ判定 Y/N） | ユーザー承認 |
 
 ## 完了基準の確認
