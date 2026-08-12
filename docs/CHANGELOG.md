@@ -18,6 +18,7 @@
 - UI: デモ・未対応項目の明示（経由地未対応、辞書サンプル、ZIP 次フェーズ、AI 表示是正）
 - テスト: 49 Python + 13 Node（永続化・RBAC・監査 CSV・featureless リスク回帰・include_sources・saveAndGenerate・submitProject 等を追加）
 - 文書: 評価報告書・改善台帳・テスト証跡・CHANGELOG 追加、README/RELEASE_READINESS 整合
+- 修正: 認証済みユーザーの users テーブル upsert（ensure_user）で PostgreSQL の owner_user_id FK 制約違反を解消。SQLite テストも PRAGMA foreign_keys=ON で同等検証
 
 ### 先行作業の継承（2026-08-12 作業ツリー）
 - JWKS キャッシュ TTL・ロック、OIDC fail-closed、API キー hmac 比較、PRODUCTION_MODE fail-closed
