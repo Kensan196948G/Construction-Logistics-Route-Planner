@@ -14,6 +14,17 @@ from app.main import app
 TEST_DATABASE_URL = "sqlite+aiosqlite://"
 
 
+@pytest.fixture(autouse=True)
+def _reset_knowledge_rate_limit():
+    """Keep the in-memory knowledge rate limiter isolated between tests."""
+
+    from app.main import _knowledge_hits
+
+    _knowledge_hits.clear()
+    yield
+    _knowledge_hits.clear()
+
+
 @pytest.fixture(scope="session")
 def event_loop():
     loop = asyncio.new_event_loop()

@@ -56,17 +56,23 @@
     ]
   },
   "validation": {
-    "pytest": "32 passed (Python)",
+    "pytest": "46 passed (Python)",
     "ruff": "passed",
     "compileall": "passed",
     "bandit": "passed (0 issues)",
     "wheel_build": "passed",
     "asset_check": "passed (all static assets packaged)",
     "node_syntax": "passed (3 files)",
-    "node_tests": "5 passed"
+    "node_tests": "13 passed",
+    "security_headers": "passed (CSP/headers on all responses)",
+    "rate_limit": "passed (knowledge 30/min/IP -> 429)",
+    "csv_formula_injection": "passed (neutralized)",
+    "production_fail_closed": "passed (503 without auth config)",
+    "re_eval_confirmation_carryover": "passed",
+    "route_generation_versioning": "passed (latest generation only)"
   },
   "last_session": {
-    "date": "2026-08-05",
-    "summary": "第1スプリント完了: PostGIS migration+compose、4ロールRBAC、確認・承認・差戻しWF+監査API、OSRM実ルーティング（実測1.5km）、Overpass実地物取得（実測430件）、PDF帳票、API E2E、backup/restore/monitorスクリプトを実装。pytest 32件+Node 5件成功。xROAD/KSJ/PLATEAU実連携・Excel・実ブラウザE2E・UATは次スプリント。"
+    "date": "2026-08-12",
+    "summary": "本番運用水準の総合評価と改善: 認証フェイルクローズ（PRODUCTION_MODE）、タイミングセーフなAPIキー比較、Entra JWKS TTL+再取得、セキュリティヘッダー・CSP、ナレッジ検索レートリミット、CSV数式インジェクション対策、リスク確認ステータスの再評価引き継ぎ、ルート世代管理（重複防止）、搬入/回避条件のDB永続化、owner_user_id記録、監査ログCSVエクスポート、DB健全性のhealth反映、UIの提出/承認/ダウンロード/APIキー実動作を実装。pytest 46件+Node 13件成功、実サーバースモーク成功。xROAD/KSJ/PLATEAU実連携・Excel・実ブラウザE2E・Entra IDテナント設定は次フェーズ。"
   }
 }

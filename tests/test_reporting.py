@@ -152,3 +152,20 @@ def test_render_csv_is_parseable_and_quotes_commas() -> None:
     csv_text = render_csv(_project(), [route])
     rows = list(csv.reader(io.StringIO(csv_text)))
     assert rows[1][rows[0].index("risk_message")] == "幅員 2.6m, 待避所 2 箇所"
+
+
+def test_render_csv_neutralizes_formula_injection() -> None:
+    """Excel/LibreOffice formula injection must be neutralized in CSV cells."""
+
+    route = _route_with_risk()
+    route.risks[0].title = '=HYPERLINK("http://evil.example", "click")'
+    route.risks[0].message = "+SUM(1,1)"
+    route.risks[0].confirmation_target = "@import malicious"
+    csv_text = render_csv(_project(), [route])
+    rows = list(csv.reader(io.StringIO(csv_text)))
+    header = rows[0]
+    row = rows[1]
+
+    assert row[header.index("risk_title")].startswith("'=")
+    assert row[header.index("risk_message")].startswith("'+")
+    assert row[header.index("confirmation_target")].startswith("'@")

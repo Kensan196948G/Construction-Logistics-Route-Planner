@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
+import threading
+import time
 import urllib.request
 from typing import Annotated
 
@@ -23,6 +26,19 @@ class UserInfo(BaseModel):
 ROLES: tuple[str, ...] = ("admin", "planner", "site_user", "viewer")
 
 _entra_jwks: dict[str, dict] | None = None
+_entra_jwks_fetched_at: float = 0.0
+_entra_jwks_lock = threading.Lock()
+_JWKS_CACHE_TTL_SECONDS = 6 * 60 * 60
+
+
+def _is_production_mode() -> bool:
+    """Whether the deployment claims to be production (fail-closed)."""
+
+    return os.getenv("PRODUCTION_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _auth_configured() -> bool:
+    return bool(os.getenv("APP_API_KEY")) or _is_oidc_enabled()
 
 
 def _is_oidc_enabled() -> bool:
@@ -41,13 +57,42 @@ def _entra_config() -> dict:
 
 
 def _fetch_entra_jwks(jwks_uri: str) -> dict[str, dict]:
-    global _entra_jwks
-    if _entra_jwks is not None:
+    """Fetch and cache Entra signing keys with a TTL and refresh on kid miss.
+
+    A global cache without expiry breaks token validation after a key rotation;
+    a cache that never refreshes on an unknown ``kid`` forces a process restart.
+    Both failure modes are avoided here: stale entries are re-fetched after the
+    TTL, and an unknown kid triggers one immediate refresh before giving up.
+    """
+
+    global _entra_jwks, _entra_jwks_fetched_at
+    now = time.monotonic()
+    with _entra_jwks_lock:
+        if _entra_jwks is not None and now - _entra_jwks_fetched_at < _JWKS_CACHE_TTL_SECONDS:
+            return _entra_jwks
+        with urllib.request.urlopen(jwks_uri, timeout=10) as resp:  # nosec B310
+            data = json.loads(resp.read())
+        keys = {key["kid"]: key for key in data.get("keys", [])}
+        if not keys:
+            raise RuntimeError("Entra JWKS endpoint returned no keys")
+        _entra_jwks = keys
+        _entra_jwks_fetched_at = now
         return _entra_jwks
-    with urllib.request.urlopen(jwks_uri, timeout=10) as resp:  # nosec B310
-        data = json.loads(resp.read())
-    _entra_jwks = {key["kid"]: key for key in data["keys"]}
-    return _entra_jwks
+
+
+def _refresh_entra_jwks(jwks_uri: str) -> dict[str, dict]:
+    """Force one JWKS refresh (used when the cached keys do not contain the kid)."""
+
+    global _entra_jwks, _entra_jwks_fetched_at
+    with _entra_jwks_lock:
+        with urllib.request.urlopen(jwks_uri, timeout=10) as resp:  # nosec B310
+            data = json.loads(resp.read())
+        keys = {key["kid"]: key for key in data.get("keys", [])}
+        if not keys:
+            raise RuntimeError("Entra JWKS endpoint returned no keys")
+        _entra_jwks = keys
+        _entra_jwks_fetched_at = time.monotonic()
+        return _entra_jwks
 
 
 async def get_current_user(
@@ -63,6 +108,13 @@ async def get_current_user(
 
 
 async def _oidc_auth(authorization: str | None, config: dict) -> UserInfo:
+    if not config.get("client_id"):
+        # ENTRA_TENANT_ID without ENTRA_CLIENT_ID is a deployment error, not a
+        # reason to fall back to open access. Fail closed with a clear signal.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OIDC is enabled but ENTRA_CLIENT_ID is not configured.",
+        )
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -82,6 +134,10 @@ async def _oidc_auth(authorization: str | None, config: dict) -> UserInfo:
     kid = unverified_header.get("kid")
     jwks = _fetch_entra_jwks(config["jwks_uri"])
     jwk_data = jwks.get(kid)
+    if jwk_data is None:
+        # Possible key rotation: refresh once before rejecting the token.
+        jwks = _refresh_entra_jwks(config["jwks_uri"])
+        jwk_data = jwks.get(kid)
     if jwk_data is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -118,7 +174,13 @@ async def _oidc_auth(authorization: str | None, config: dict) -> UserInfo:
 def _api_key_auth(request: Request, authorization: str | None) -> UserInfo:
     expected = os.getenv("APP_API_KEY")
     if expected:
-        if not authorization or authorization != f"Bearer {expected}":
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Valid Authorization bearer token is required.",
+            )
+        provided = authorization.removeprefix("Bearer ").strip()
+        if not hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Valid Authorization bearer token is required.",
@@ -128,7 +190,21 @@ def _api_key_auth(request: Request, authorization: str | None) -> UserInfo:
         # are ignored: they are spoofable and must never feed audit records.
         user_id = os.getenv("APP_API_KEY_USER_ID", "api-key-operator")
         role = os.getenv("APP_API_KEY_USER_ROLE", "planner")
+    elif _is_production_mode():
+        # Production mode must never run open. Without APP_API_KEY or Entra ID
+        # configured, every protected operation is refused with a clear 503 so
+        # the deployment error surfaces instead of an authorization bypass.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Authentication is not configured for production mode. "
+                "Set APP_API_KEY or ENTRA_TENANT_ID/ENTRA_CLIENT_ID."
+            ),
+        )
     else:
+        # PoC/local mode only: no key configured means open access with a
+        # fixed non-spoofable identity. This is intentional and documented;
+        # PRODUCTION_MODE=1 switches it to fail-closed.
         user_id = "anonymous"
         role = "planner"
     if role not in ROLES:

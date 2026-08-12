@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -42,6 +42,11 @@ class Project(Base):
     status: Mapped[str] = mapped_column(String(50), default="draft")
     owner_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"))
     transport_purpose: Mapped[str | None] = mapped_column(String(200))
+    delivery_date: Mapped[date | None] = mapped_column(Date)
+    time_window: Mapped[str | None] = mapped_column(String(50))
+    holiday: Mapped[bool] = mapped_column(Boolean, default=False)
+    night_delivery_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    avoid_conditions: Mapped[list | None] = mapped_column(JSON)
     planned_date: Mapped[datetime | None] = mapped_column(DateTime)
     planned_time_window: Mapped[str | None] = mapped_column(String(50))
     notes: Mapped[str | None] = mapped_column(Text)
@@ -95,6 +100,7 @@ class RouteCandidate(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id"), nullable=False)
+    generation: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     route_type: Mapped[str] = mapped_column(String(50))
     name: Mapped[str] = mapped_column(String(200))
     distance_km: Mapped[float] = mapped_column(Float)

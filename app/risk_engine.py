@@ -85,7 +85,7 @@ def sample_overlay_features(
             lng=quarter.lng,
             source="OpenStreetMap sample overlay",
             acquired_at=acquired_at,
-            data_quality=DataQuality.osm,
+            data_quality=DataQuality.estimated,
             attributes={"max_weight_t": None, "road_name": "sample primary road"},
         ),
         RouteFeature(
@@ -96,7 +96,7 @@ def sample_overlay_features(
             lng=midpoint.lng,
             source="OpenStreetMap sample overlay",
             acquired_at=acquired_at,
-            data_quality=DataQuality.osm,
+            data_quality=DataQuality.estimated,
             attributes={"missing_tags": "maxheight,maxweight,width"},
         ),
     ]
@@ -111,7 +111,7 @@ def sample_overlay_features(
                 lng=midpoint.lng,
                 source="OpenStreetMap sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.osm,
+                data_quality=DataQuality.estimated,
                 attributes={"max_height_m": None},
             )
         )
@@ -127,7 +127,7 @@ def sample_overlay_features(
                     lng=midpoint.lng - 0.001,
                     source="国土数値情報 sample overlay",
                     acquired_at=acquired_at,
-                    data_quality=DataQuality.public_authority,
+                    data_quality=DataQuality.estimated,
                     attributes={"distance_m": 220},
                 ),
                 RouteFeature(
@@ -138,7 +138,7 @@ def sample_overlay_features(
                     lng=three_quarter.lng,
                     source="国土数値情報 sample overlay",
                     acquired_at=acquired_at,
-                    data_quality=DataQuality.public_authority,
+                    data_quality=DataQuality.estimated,
                     attributes={"residential_ratio": 0.38},
                 ),
             ]
@@ -169,7 +169,7 @@ def sample_overlay_features(
                 lng=midpoint.lng + 0.001,
                 source="国土数値情報 sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.public_authority,
+                data_quality=DataQuality.estimated,
                 attributes={"distance_m": 280},
             )
         )
@@ -184,11 +184,13 @@ def sample_overlay_features(
                 lng=quarter.lng + 0.001,
                 source="国土数値情報 sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.public_authority,
+                data_quality=DataQuality.estimated,
                 attributes={"hazard": "flood"},
             )
         )
 
+    for feature in features:
+        feature.attributes["sample"] = True
     return features
 
 
@@ -197,10 +199,17 @@ def evaluate_route(
     route: RouteCandidate,
     request: EvaluationRequest | None = None,
 ) -> RouteCandidate:
-    del request
     risks: list[RiskItem] = []
 
-    for feature in route.features:
+    features = route.features
+    if request is not None and request.include_sources:
+        features = [
+            feature
+            for feature in route.features
+            if _source_category(feature) in set(request.include_sources)
+        ]
+
+    for feature in features:
         if feature.feature_type == "bridge":
             if feature.attributes.get("max_weight_t") is None:
                 risks.append(
@@ -364,6 +373,21 @@ def evaluate_route(
     route.summary = _summary(route)
     route.evaluation_status = "evaluated"
     return route
+
+
+def _source_category(feature: RouteFeature) -> str:
+    """Map a feature's source string to the include_sources vocabulary."""
+
+    source = (feature.source or "").lower()
+    if "openstreetmap" in source or "overpass" in source:
+        return "osm"
+    if "xroad" in source:
+        return "xroad"
+    if "国土数値情報" in source or "ksj" in source:
+        return "ksj"
+    if "plateau" in source:
+        return "plateau"
+    return "sample"
 
 
 def risk_counts(risks: list[RiskItem]) -> dict[str, int]:

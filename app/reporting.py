@@ -125,9 +125,9 @@ def render_csv(project: Project, routes: list[RouteCandidate]) -> str:
             writer.writerow(
                 [
                     project.id,
-                    project.project_name,
+                    _csv_safe(project.project_name),
                     route.id,
-                    route.name,
+                    _csv_safe(route.name),
                     route.distance_km,
                     route.duration_min,
                     route.risk_level.value,
@@ -144,21 +144,35 @@ def render_csv(project: Project, routes: list[RouteCandidate]) -> str:
             writer.writerow(
                 [
                     project.id,
-                    project.project_name,
+                    _csv_safe(project.project_name),
                     route.id,
-                    route.name,
+                    _csv_safe(route.name),
                     route.distance_km,
                     route.duration_min,
                     route.risk_level.value,
                     route.risk_score,
-                    risk.title,
-                    risk.message,
-                    risk.confirmation_target,
-                    risk.evidence,
+                    _csv_safe(risk.title),
+                    _csv_safe(risk.message),
+                    _csv_safe(risk.confirmation_target),
+                    _csv_safe(risk.evidence),
                     SAMPLE_DATA_NOTICE,
                 ]
             )
     return output.getvalue()
+
+
+def _csv_safe(value: str) -> str:
+    """Neutralize spreadsheet formula injection in exported CSV cells.
+
+    Cells beginning with =, +, -, @, tab or CR can be interpreted as formulas
+    when the CSV is opened in Excel/LibreOffice. Prefixing a single quote
+    keeps the value readable while preventing formula execution.
+    """
+
+    text = str(value)
+    if text and text[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + text
+    return text
 
 
 def render_pdf(project: Project, routes: list[RouteCandidate]) -> bytes:

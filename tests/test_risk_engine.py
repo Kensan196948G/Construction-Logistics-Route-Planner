@@ -1,4 +1,4 @@
-from app.models import DeliveryCondition, LocationInput, Project, VehicleCondition, now_utc
+from app.models import DeliveryCondition, EvaluationRequest, LocationInput, Project, VehicleCondition, now_utc
 from app.risk_engine import evaluate_route, generate_routes
 
 
@@ -46,3 +46,25 @@ def test_high_weight_bridge_adds_exclusion_consideration() -> None:
 
     assert evaluated.risk_level == "exclusion_consideration"
     assert any(risk.rule_id == "RR-BRIDGE-002" for risk in evaluated.risks)
+
+
+def test_sample_features_are_ranked_estimated() -> None:
+    prj = project()
+    route = generate_routes(prj, ["shortest"])[0]
+
+    assert route.features
+    assert all(feature.data_quality.value == "E" for feature in route.features)
+    assert all(feature.attributes.get("sample") is True for feature in route.features)
+
+
+def test_include_sources_filters_evaluation_inputs() -> None:
+    prj = project()
+    route = generate_routes(prj, ["shortest"])[0]
+
+    osm_only = evaluate_route(prj, route, EvaluationRequest(include_sources=["osm"]))
+    assert not any(risk.rule_id.startswith("RR-SCHOOL") for risk in osm_only.risks)
+    assert any(risk.rule_id == "RR-BRIDGE-001" for risk in osm_only.risks)
+
+    ksj_only = evaluate_route(prj, route, EvaluationRequest(include_sources=["ksj"]))
+    assert any(risk.rule_id.startswith("RR-SCHOOL") for risk in ksj_only.risks)
+    assert not any(risk.rule_id == "RR-BRIDGE-001" for risk in ksj_only.risks)

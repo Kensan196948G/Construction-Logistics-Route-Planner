@@ -13,11 +13,9 @@ routes = [
 ]
 
 [env.production.vars]
-BACKEND_ORIGIN = "http://localhost:8000"
-DATABASE_URL = ""
-APP_API_KEY = ""
-ENTRA_TENANT_ID = ""
-ENTRA_CLIENT_ID = ""
+# The FastAPI backend's public HTTPS URL (e.g. https://route-planner-api.example.com).
+# Set via Cloudflare dashboard/CI secret, never commit a real value here.
+BACKEND_ORIGIN = ""
 
 [env.staging]
 routes = [
@@ -25,8 +23,4 @@ routes = [
 ]
 
 [env.staging.vars]
-BACKEND_ORIGIN = "http://localhost:8000"
-DATABASE_URL = ""
-APP_API_KEY = ""
-ENTRA_TENANT_ID = ""
-ENTRA_CLIENT_ID = ""
+BACKEND_ORIGIN = ""

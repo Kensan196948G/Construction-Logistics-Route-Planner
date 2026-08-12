@@ -11,6 +11,7 @@ logger = getLogger(__name__)
 
 _OVERPASS_DEFAULT_URL = "https://overpass-api.de/api/interpreter"
 _CACHE_TTL_SECONDS = 6 * 60 * 60
+_OVERPASS_CACHE_MAX_ENTRIES = 256
 _overpass_cache: dict[tuple, tuple[float, list[RouteFeature]]] = {}
 
 
@@ -54,6 +55,8 @@ class OSMOverpassAdapter(DataSourceAdapter):
             logger.exception("Overpass fetch failed for (%.6f, %.6f, %dm)", lat, lng, radius_m)
             features = self._sample_features(lat, lng, radius_m)
         _overpass_cache[cache_key] = (time.monotonic(), features)
+        if len(_overpass_cache) > _OVERPASS_CACHE_MAX_ENTRIES:
+            _overpass_cache.pop(next(iter(_overpass_cache)))
         return features
 
     async def _fetch_overpass(self, lat: float, lng: float, radius_m: int) -> list[RouteFeature]:
@@ -133,7 +136,7 @@ class OSMOverpassAdapter(DataSourceAdapter):
                 lng=lng - 0.002,
                 source="OpenStreetMap sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.osm,
+                data_quality=DataQuality.estimated,
                 attributes={"max_weight_t": None, "road_name": "sample primary road"},
             ),
             RouteFeature(
@@ -144,7 +147,7 @@ class OSMOverpassAdapter(DataSourceAdapter):
                 lng=lng + 0.001,
                 source="OpenStreetMap sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.osm,
+                data_quality=DataQuality.estimated,
                 attributes={"max_height_m": None},
             ),
             RouteFeature(
@@ -155,7 +158,7 @@ class OSMOverpassAdapter(DataSourceAdapter):
                 lng=lng,
                 source="OpenStreetMap sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.osm,
+                data_quality=DataQuality.estimated,
                 attributes={"missing_tags": "maxheight,maxweight,width"},
             ),
             RouteFeature(
@@ -166,7 +169,7 @@ class OSMOverpassAdapter(DataSourceAdapter):
                 lng=lng - 0.001,
                 source="国土数値情報 sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.public_authority,
+                data_quality=DataQuality.estimated,
                 attributes={"distance_m": 220},
             ),
             RouteFeature(
@@ -177,7 +180,7 @@ class OSMOverpassAdapter(DataSourceAdapter):
                 lng=lng + 0.001,
                 source="国土数値情報 sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.public_authority,
+                data_quality=DataQuality.estimated,
                 attributes={"distance_m": 280},
             ),
             RouteFeature(
@@ -188,7 +191,7 @@ class OSMOverpassAdapter(DataSourceAdapter):
                 lng=lng - 0.003,
                 source="国土数値情報 sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.public_authority,
+                data_quality=DataQuality.estimated,
                 attributes={"residential_ratio": 0.38},
             ),
             RouteFeature(
@@ -210,10 +213,12 @@ class OSMOverpassAdapter(DataSourceAdapter):
                 lng=lng + 0.003,
                 source="国土数値情報 sample overlay",
                 acquired_at=acquired_at,
-                data_quality=DataQuality.public_authority,
+                data_quality=DataQuality.estimated,
                 attributes={"hazard": "flood"},
             ),
         ]
+        for feature in features:
+            feature.attributes["sample"] = True
         return features
 
     async def health_check(self) -> dict:

@@ -52,7 +52,7 @@
       <div style="padding:15px 18px 6px; font-size:10.5px; font-weight:700; letter-spacing:.12em; color:#5c636d;">ナレッジ</div>
       <button onClick="{{ nav.knowledge.go }}" style="display:flex; align-items:center; gap:11px; width:100%; padding:10px 18px; border:none; cursor:pointer; font:inherit; font-size:13.5px; font-weight:600; text-align:left; background:{{ nav.knowledge.bg }}; color:{{ nav.knowledge.fg }}; box-shadow:inset 3px 0 0 {{ nav.knowledge.bar }};">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="6"/><path d="M19 19l-4.5-4.5"/><path d="M10 6.5l.7 1.8 1.8.7-1.8.7L10 11.5l-.7-1.8L7.5 9l1.8-.7z" fill="currentColor" stroke="none"/></svg>
-        ナレッジ検索 <span style="margin-left:auto; font-size:9px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#15181c; background:#ff6a00; border-radius:3px; padding:1.5px 5px;">AI</span>
+        ナレッジ検索 <span style="margin-left:auto; font-size:9px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#15181c; background:#ff6a00; border-radius:3px; padding:1.5px 5px;">ルール</span>
       </button>
       <button onClick="{{ nav.facilities.go }}" style="display:flex; align-items:center; gap:11px; width:100%; padding:10px 18px; border:none; cursor:pointer; font:inherit; font-size:13.5px; font-weight:600; text-align:left; background:{{ nav.facilities.bg }}; color:{{ nav.facilities.fg }}; box-shadow:inset 3px 0 0 {{ nav.facilities.bar }};">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
@@ -82,19 +82,19 @@
       <div style="display:flex; align-items:center; gap:13px; min-width:0;">
         <span style="font-size:12px; color:#828a94;">対象案件</span>
         <div style="display:flex; align-items:center; gap:9px; background:#23272d; border:1px solid #333a42; padding:6px 12px; border-radius:6px; cursor:pointer; min-width:0;">
-          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8a93a0;">PRJ-2418</span>
-          <span style="font-weight:600; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">第二期 護岸ブロック据付</span>
-          <span style="flex:none; padding:2px 7px; border-radius:3px; font-size:10.5px; font-weight:600; background:#3a2419; color:#ff8a3d; border:1px solid #5a3115;">追加確認中</span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8a93a0;">{{ pidLabel }}</span>
+          <span style="font-weight:600; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ activeProjectName }}</span>
+          <span style="flex:none; padding:2px 7px; border-radius:3px; font-size:10.5px; font-weight:600; background:#3a2419; color:#ff8a3d; border:1px solid #5a3115;">{{ activeStatusLabel }}</span>
           <span style="color:#828a94; font-size:11px;">▾</span>
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:20px; flex:none;">
-        <span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#aab2bc;">2026/06/19 (木) 09:42</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#aab2bc;">{{ todayLabel }}</span>
         <div style="display:flex; align-items:center; gap:9px;">
-          <div style="width:32px; height:32px; border-radius:50%; background:#2b6cb0; border:1.5px solid #4b89cc; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; font-family:'Space Grotesk',sans-serif;">中村</div>
+          <div style="width:32px; height:32px; border-radius:50%; background:#2b6cb0; border:1.5px solid #4b89cc; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; font-family:'Space Grotesk',sans-serif;">API</div>
           <div style="line-height:1.25;">
-            <div style="font-size:12.5px; font-weight:600;">中村 健三</div>
-            <div style="font-size:10.5px; color:#828a94;">施工計画担当</div>
+            <div style="font-size:12.5px; font-weight:600;">{{ userLabel }}</div>
+            <div style="font-size:10.5px; color:#828a94;">Entra ID 連携は設定待ち</div>
           </div>
         </div>
       </div>
@@ -128,6 +128,13 @@
             </button>
           </div>
         </div>
+
+        <sc-if value="{{ apiError }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:14px; background:#f9e2e0; border:1.5px solid #ecb1ab; border-radius:8px; padding:11px 14px; font-size:12.5px; color:#a01b13;">{{ apiError }}</div>
+        </sc-if>
+        <sc-if value="{{ apiNotice }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:14px; background:#e4f3e9; border:1.5px solid #bfe3cf; border-radius:8px; padding:11px 14px; font-size:12.5px; color:#1f6e3d;">{{ apiNotice }}</div>
+        </sc-if>
 
         <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:18px;">
           <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
@@ -219,12 +226,16 @@
           <div>
             <div style="font-family:'Space Grotesk',sans-serif; font-size:11.5px; font-weight:600; letter-spacing:.16em; color:#8a8f98;">PROJECT &amp; CONDITIONS</div>
             <h1 style="margin:5px 0 0; font-size:24px; font-weight:700;">案件・搬入条件の入力</h1>
-            <div style="margin-top:6px; font-size:13px; color:#5e646c;"><span style="font-family:'JetBrains Mono',monospace; color:#9aa0a7;">PRJ-2418</span> · 入力後にルート候補を生成します。空欄の条件は「データ不足／追加確認」として扱われます。</div>
+            <div style="margin-top:6px; font-size:13px; color:#5e646c;"><span style="font-family:'JetBrains Mono',monospace; color:#9aa0a7;">{{ pidLabel }}</span> · 入力後にルート候補を生成します。空欄の条件は「データ不足／追加確認」として扱われます。</div>
           </div>
           <div style="display:flex; gap:10px;">
-            <button style="padding:9px 14px; background:#fff; border:1.5px solid #c9c4ba; border-radius:6px; font:inherit; font-size:12.5px; font-weight:600; color:#5e646c; cursor:pointer;">下書き保存</button>
+            <button onClick="{{ createProject }}" style="padding:9px 14px; background:#fff; border:1.5px solid #c9c4ba; border-radius:6px; font:inherit; font-size:12.5px; font-weight:600; color:#5e646c; cursor:pointer;">下書き保存</button>
           </div>
         </div>
+
+        <sc-if value="{{ apiError }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:14px; background:#f9e2e0; border:1.5px solid #ecb1ab; border-radius:8px; padding:11px 14px; font-size:12.5px; color:#a01b13;">{{ apiError }}</div>
+        </sc-if>
 
         <div style="display:grid; grid-template-columns:1fr 320px; gap:20px; align-items:start;">
           <div>
@@ -232,15 +243,15 @@
             <div style="background:#fff; border:1.5px solid #d8d4cc; border-radius:8px; margin-bottom:18px; overflow:hidden;">
               <div style="display:flex; align-items:center; gap:10px; padding:13px 18px; border-bottom:1.5px solid #ece9e2;"><span style="width:22px; height:22px; border-radius:5px; background:#1a1d21; color:#fff; font-size:11px; font-weight:700; font-family:'Space Grotesk',sans-serif; display:flex; align-items:center; justify-content:center;">1</span><span style="font-weight:700; font-size:14px;">案件情報</span></div>
               <div style="padding:18px; display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-                <label style="grid-column:1 / 3; display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">工事件名<span style="color:#d9531e; font-size:10px; margin-left:4px;">必須</span></span><div style="margin-top:5px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font-size:13px;">第二期 護岸ブロック据付工事</div></label>
-                <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">現場名<span style="color:#d9531e; font-size:10px; margin-left:4px;">必須</span></span><div style="margin-top:5px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font-size:13px;">△△川 右岸 2.4k 付近</div></label>
-                <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">担当者<span style="color:#d9531e; font-size:10px; margin-left:4px;">必須</span></span><div style="margin-top:5px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font-size:13px;">中村 健三（施工計画担当）</div></label>
+                <label style="grid-column:1 / 3; display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">工事件名<span style="color:#d9531e; font-size:10px; margin-left:4px;">必須</span></span><input value="{{ pfFields.project_name.value }}" onInput="{{ pfFields.project_name.onInput }}" placeholder="例: 第二期 護岸ブロック据付工事" style="margin-top:5px; width:100%; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; outline:none;"></label>
+                <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">現場名<span style="color:#d9531e; font-size:10px; margin-left:4px;">必須</span></span><input value="{{ pfFields.site_name.value }}" onInput="{{ pfFields.site_name.onInput }}" placeholder="例: △△川 右岸 2.4k 付近" style="margin-top:5px; width:100%; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; outline:none;"></label>
+                <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">担当者<span style="color:#d9531e; font-size:10px; margin-left:4px;">必須</span></span><input value="{{ pfFields.planner.value }}" onInput="{{ pfFields.planner.onInput }}" placeholder="例: 中村 健三" style="margin-top:5px; width:100%; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; outline:none;"></label>
                 <div style="grid-column:1 / 3;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">発注者区分</span>
                   <div style="margin-top:7px; display:flex; gap:8px;">
                     <sc-for list="{{ clientTypes }}" as="c" hint-placeholder-count="3"><button onClick="{{ c.onClick }}" style="padding:7px 16px; border-radius:6px; border:1.5px solid {{ c.border }}; background:{{ c.bg }}; color:{{ c.fg }}; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">{{ c.label }}</button></sc-for>
                   </div>
                 </div>
-                <label style="grid-column:1 / 3; display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">備考</span><div style="margin-top:5px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font-size:13px; min-height:46px; color:#7c828c;">夜間搬入不可。近隣に小学校・病院あり。クレーン作業帯を午前に確保したい。</div></label>
+                <label style="grid-column:1 / 3; display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">備考</span><textarea value="{{ pfFields.notes.value }}" onInput="{{ pfFields.notes.onInput }}" placeholder="夜間搬入不可、近隣配慮など" style="margin-top:5px; width:100%; min-height:52px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; resize:vertical; outline:none; color:#3a3f46;"></textarea></label>
               </div>
             </div>
 
@@ -248,9 +259,15 @@
               <div style="display:flex; align-items:center; gap:10px; padding:13px 18px; border-bottom:1.5px solid #ece9e2;"><span style="width:22px; height:22px; border-radius:5px; background:#1a1d21; color:#fff; font-size:11px; font-weight:700; font-family:'Space Grotesk',sans-serif; display:flex; align-items:center; justify-content:center;">2</span><span style="font-weight:700; font-size:14px;">地点・経路条件</span></div>
               <div style="padding:18px; display:grid; grid-template-columns:1fr 200px; gap:16px;">
                 <div style="display:flex; flex-direction:column; gap:12px;">
-                  <div style="display:flex; align-items:center; gap:10px;"><span style="width:22px; height:22px; flex:none; border-radius:50%; background:#1f8a4c; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;">発</span><div style="flex:1;"><div style="font-size:10.5px; color:#9aa0a7;">出発地</div><div style="font-size:13px; font-weight:500;">◇◇生コン 第二プラント</div></div></div>
-                  <div style="display:flex; align-items:center; gap:10px;"><span style="width:22px; height:22px; flex:none; border-radius:50%; background:#2b6cb0; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;">経</span><div style="flex:1;"><div style="font-size:10.5px; color:#9aa0a7;">経由地（1）</div><div style="font-size:13px; font-weight:500;">資材ヤード ××地内</div></div></div>
-                  <div style="display:flex; align-items:center; gap:10px;"><span style="width:22px; height:22px; flex:none; border-radius:50%; background:#1a1d21; color:#fff; border:2px solid #ff6a00; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;">現</span><div style="flex:1;"><div style="font-size:10.5px; color:#9aa0a7;">到着地（現場）</div><div style="font-size:13px; font-weight:500;">△△川 右岸 2.4k 付近</div></div></div>
+                  <div style="display:flex; align-items:center; gap:10px;"><span style="width:22px; height:22px; flex:none; border-radius:50%; background:#1f8a4c; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;">発</span><div style="flex:1;"><div style="font-size:10.5px; color:#9aa0a7;">出発地<span style="color:#d9531e; font-size:10px; margin-left:4px;">必須</span></div><input value="{{ pfFields.start_name.value }}" onInput="{{ pfFields.start_name.onInput }}" placeholder="例: ◇◇生コン 第二プラント" style="margin-top:2px; width:100%; padding:7px 9px; background:#fff; border:1.5px solid #d4cfc4; border-radius:6px; font:inherit; font-size:12.5px; outline:none;"></div></div>
+                  <div style="display:flex; align-items:center; gap:10px;"><span style="width:22px; height:22px; flex:none; border-radius:50%; background:#2b6cb0; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;">経</span><div style="flex:1;"><div style="font-size:10.5px; color:#9aa0a7;">経由地（本バージョンでは未対応）</div><div style="font-size:12px; font-weight:500; color:#9aa0a7;">次フェーズで対応予定</div></div></div>
+                  <div style="display:flex; align-items:center; gap:10px;"><span style="width:22px; height:22px; flex:none; border-radius:50%; background:#1a1d21; color:#fff; border:2px solid #ff6a00; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;">現</span><div style="flex:1;"><div style="font-size:10.5px; color:#9aa0a7;">到着地（現場）<span style="color:#d9531e; font-size:10px; margin-left:4px;">必須</span></div><input value="{{ pfFields.dest_name.value }}" onInput="{{ pfFields.dest_name.onInput }}" placeholder="例: △△川 右岸 2.4k 付近" style="margin-top:2px; width:100%; padding:7px 9px; background:#fff; border:1.5px solid #d4cfc4; border-radius:6px; font:inherit; font-size:12.5px; outline:none;"></div></div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:2px;">
+                    <label><span style="font-size:10px; color:#9aa0a7;">出発 緯度</span><input value="{{ pfFields.start_lat.value }}" onInput="{{ pfFields.start_lat.onInput }}" style="margin-top:2px; width:100%; padding:6px 8px; background:#fff; border:1.5px solid #d4cfc4; border-radius:6px; font:inherit; font-size:11.5px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
+                    <label><span style="font-size:10px; color:#9aa0a7;">出発 経度</span><input value="{{ pfFields.start_lng.value }}" onInput="{{ pfFields.start_lng.onInput }}" style="margin-top:2px; width:100%; padding:6px 8px; background:#fff; border:1.5px solid #d4cfc4; border-radius:6px; font:inherit; font-size:11.5px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
+                    <label><span style="font-size:10px; color:#9aa0a7;">到着 緯度</span><input value="{{ pfFields.dest_lat.value }}" onInput="{{ pfFields.dest_lat.onInput }}" style="margin-top:2px; width:100%; padding:6px 8px; background:#fff; border:1.5px solid #d4cfc4; border-radius:6px; font:inherit; font-size:11.5px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
+                    <label><span style="font-size:10px; color:#9aa0a7;">到着 経度</span><input value="{{ pfFields.dest_lng.value }}" onInput="{{ pfFields.dest_lng.onInput }}" style="margin-top:2px; width:100%; padding:6px 8px; background:#fff; border:1.5px solid #d4cfc4; border-radius:6px; font:inherit; font-size:11.5px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
+                  </div>
                   <div style="display:flex; gap:8px; margin-top:2px;">
                     <input placeholder="住所・地点名で検索して追加" style="flex:1; padding:9px 11px; border:1.5px solid #d4cfc4; border-radius:6px; font:inherit; font-size:12.5px; outline:none;">
                     <button style="padding:0 13px; background:#fff; border:1.5px solid #c9c4ba; border-radius:6px; font:inherit; font-size:12.5px; font-weight:600; color:#5e646c; cursor:pointer;">地図で指定</button>
@@ -279,15 +296,16 @@
                   <sc-for list="{{ vehicleTypes }}" as="v" hint-placeholder-count="5"><button onClick="{{ v.onClick }}" style="padding:7px 15px; border-radius:6px; border:1.5px solid {{ v.border }}; background:{{ v.bg }}; color:{{ v.fg }}; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">{{ v.label }}</button></sc-for>
                 </div>
                 <div style="margin-top:16px; display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
-                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">全長 (m)</span><div style="margin-top:5px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font-size:13px; font-family:'JetBrains Mono',monospace;">12.0</div></label>
-                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">全幅 (m)</span><div style="margin-top:5px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font-size:13px; font-family:'JetBrains Mono',monospace;">2.49</div></label>
-                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">全高 (m)</span><div style="margin-top:5px; padding:9px 11px; background:#fff4e8; border:1.5px solid #f3d8b8; border-radius:6px; font-size:13px; font-family:'JetBrains Mono',monospace;">3.8</div></label>
-                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">総重量 (t)</span><div style="margin-top:5px; padding:9px 11px; background:#fff4e8; border:1.5px solid #f3d8b8; border-radius:6px; font-size:13px; font-family:'JetBrains Mono',monospace;">28.0</div></label>
+                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">全長 (m)</span><input value="{{ pfFields.length_m.value }}" onInput="{{ pfFields.length_m.onInput }}" placeholder="例: 12.0" style="margin-top:5px; width:100%; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
+                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">全幅 (m)</span><input value="{{ pfFields.width_m.value }}" onInput="{{ pfFields.width_m.onInput }}" placeholder="例: 2.49" style="margin-top:5px; width:100%; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
+                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">全高 (m)</span><input value="{{ pfFields.height_m.value }}" onInput="{{ pfFields.height_m.onInput }}" placeholder="例: 3.8" style="margin-top:5px; width:100%; padding:9px 11px; background:#fff4e8; border:1.5px solid #f3d8b8; border-radius:6px; font:inherit; font-size:13px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
+                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">総重量 (t)</span><input value="{{ pfFields.gross_weight_t.value }}" onInput="{{ pfFields.gross_weight_t.onInput }}" placeholder="例: 28.0" style="margin-top:5px; width:100%; padding:9px 11px; background:#fff4e8; border:1.5px solid #f3d8b8; border-radius:6px; font:inherit; font-size:13px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
                 </div>
-                <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">積載物</span><div style="margin-top:5px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font-size:13px;">護岸ブロック（2.0t/個 × 12）</div></label>
-                  <div style="display:flex; align-items:flex-end; gap:8px; padding-bottom:1px;">
-                    <span style="display:inline-flex; align-items:center; gap:7px; padding:9px 12px; background:#fff4e8; border:1.5px solid #f3d8b8; border-radius:6px; font-size:12.5px; color:#a4761a; font-weight:600;"><span style="width:8px;height:8px;border-radius:50%;background:#c47a00;"></span>特殊車両 該当の可能性あり</span>
+                <div style="margin-top:12px; display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:12px;">
+                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">積載物</span><input value="{{ pfFields.cargo_type.value }}" onInput="{{ pfFields.cargo_type.onInput }}" placeholder="例: 護岸ブロック（2.0t/個 × 12）" style="margin-top:5px; width:100%; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; outline:none;"></label>
+                  <label style="display:block;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">軸重 (t)</span><input value="{{ pfFields.axle_weight_t.value }}" onInput="{{ pfFields.axle_weight_t.onInput }}" placeholder="例: 10.0" style="margin-top:5px; width:100%; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
+                  <div onClick="{{ specialToggle.onToggle }}" style="display:flex; align-items:flex-end; gap:8px; padding-bottom:9px; cursor:pointer;">
+                    <span style="display:inline-flex; align-items:center; gap:7px; padding:9px 12px; background:#fff4e8; border:1.5px solid #f3d8b8; border-radius:6px; font-size:12.5px; color:#a4761a; font-weight:600;"><span style="width:18px;height:18px;flex:none;border-radius:5px;border:2px solid {{ specialToggle.boxBorder }};background:{{ specialToggle.boxBg }};color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ specialToggle.check }}</span>特殊車両 該当の可能性</span>
                   </div>
                 </div>
                 <div style="margin-top:13px; display:flex; gap:8px; align-items:flex-start; padding:9px 11px; background:#fff7ee; border:1px solid #f3d8b8; border-radius:7px; font-size:11.5px; color:#7a5a1a; line-height:1.5;">
@@ -301,7 +319,7 @@
               <div style="background:#fff; border:1.5px solid #d8d4cc; border-radius:8px; overflow:hidden;">
                 <div style="display:flex; align-items:center; gap:10px; padding:13px 18px; border-bottom:1.5px solid #ece9e2;"><span style="width:22px; height:22px; border-radius:5px; background:#1a1d21; color:#fff; font-size:11px; font-weight:700; font-family:'Space Grotesk',sans-serif; display:flex; align-items:center; justify-content:center;">4</span><span style="font-weight:700; font-size:14px;">搬入条件</span></div>
                 <div style="padding:18px;">
-                  <label style="display:block; margin-bottom:13px;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">搬入予定日</span><div style="margin-top:5px; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font-size:13px; font-family:'JetBrains Mono',monospace;">2026/07/03 (金)</div></label>
+                  <label style="display:block; margin-bottom:13px;"><span style="font-size:11.5px; font-weight:600; color:#6b7079;">搬入予定日</span><input type="date" value="{{ pfFields.delivery_date.value }}" onInput="{{ pfFields.delivery_date.onInput }}" style="margin-top:5px; width:100%; padding:9px 11px; background:#faf8f3; border:1.5px solid #e6e2d9; border-radius:6px; font:inherit; font-size:13px; font-family:'JetBrains Mono',monospace; outline:none;"></label>
                   <span style="font-size:11.5px; font-weight:600; color:#6b7079;">搬入時間帯</span>
                   <div style="margin-top:7px; display:flex; flex-direction:column; gap:7px;">
                     <sc-for list="{{ timeWindows }}" as="t" hint-placeholder-count="3"><button onClick="{{ t.onClick }}" style="text-align:left; padding:8px 13px; border-radius:6px; border:1.5px solid {{ t.border }}; background:{{ t.bg }}; color:{{ t.fg }}; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">{{ t.label }}</button></sc-for>
@@ -331,12 +349,12 @@
           <div style="position:sticky; top:18px; display:flex; flex-direction:column; gap:14px;">
             <div style="background:#1a1d21; border-radius:10px; padding:18px; color:#e6e9ed;">
               <div style="font-family:'Space Grotesk',sans-serif; font-size:11px; font-weight:600; letter-spacing:.14em; color:#828a94;">INPUT SUMMARY</div>
-              <div style="font-weight:700; font-size:15px; margin-top:7px; line-height:1.4;">第二期 護岸ブロック据付工事</div>
+              <div style="font-weight:700; font-size:15px; margin-top:7px; line-height:1.4;">{{ summaryProjectName }}</div>
               <div style="margin-top:14px; display:flex; flex-direction:column; gap:11px;">
-                <div style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="color:#828a94;">区間</span><span style="font-weight:600; text-align:right;">プラント → 現場</span></div>
+                <div style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="color:#828a94;">区間</span><span style="font-weight:600; text-align:right;">{{ summaryRoute }}</span></div>
                 <div style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="color:#828a94;">車両種別</span><span style="font-weight:600;">{{ vtLabel }}</span></div>
-                <div style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="color:#828a94;">全高 / 総重量</span><span style="font-weight:600; font-family:'JetBrains Mono',monospace;">3.8m / 28.0t</span></div>
-                <div style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="color:#828a94;">経由地</span><span style="font-weight:600;">1 箇所</span></div>
+                <div style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="color:#828a94;">全高 / 総重量</span><span style="font-weight:600; font-family:'JetBrains Mono',monospace;">{{ summaryVehicle }}</span></div>
+                <div style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="color:#828a94;">経由地</span><span style="font-weight:600;">未対応</span></div>
               </div>
               <div style="height:1px; background:#2c323a; margin:15px 0;"></div>
               <div style="font-size:11.5px; color:#828a94; margin-bottom:8px;">生成するルート候補</div>
@@ -348,10 +366,10 @@
               </div>
               <button onClick="{{ genRoutes }}" style="margin-top:16px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; background:{{ accent }}; border:none; border-radius:8px; font:inherit; font-size:13.5px; font-weight:700; color:#fff; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.18);" style-hover="background:#f26200;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="M8 6h7a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h7"/></svg>
-                ルート候補を生成
+                {{ genRoutesLabel }}
               </button>
             </div>
-            <div style="font-size:11px; color:#8a8f98; line-height:1.6; padding:0 4px;">生成には通常10秒程度かかります。重量・高さ制限の最終判定は行いません。橋梁・トンネル・幅員・規制は道路管理者等への確認が必要です。</div>
+            <div style="font-size:11px; color:#8a8f98; line-height:1.6; padding:0 4px;">案件を登録してルート候補を生成し、リスク評価まで自動実行します。重量・高さ制限の最終判定は行いません。橋梁・トンネル・幅員・規制は道路管理者等への確認が必要です。</div>
           </div>
         </div>
       </section>
@@ -362,7 +380,7 @@
         <div style="flex:none; background:#fff; border-bottom:1.5px solid #d8d4cc; padding:11px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
           <div style="line-height:1.25;">
             <div style="font-size:11px; color:#8a8f98; font-weight:600;">ルート検討・地図</div>
-            <div style="font-weight:700; font-size:14.5px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#9aa0a7; margin-right:6px;">PRJ-2418</span>第二期 護岸ブロック据付</div>
+            <div style="font-weight:700; font-size:14.5px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#9aa0a7; margin-right:6px;">{{ activeProjectIdLabel }}</span>{{ activeProjectLabel }}</div>
           </div>
           <div style="width:1px; height:32px; background:#e4e0d8;"></div>
           <div style="display:flex; align-items:center; gap:7px;">
@@ -375,12 +393,21 @@
           </div>
           <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
             <div style="font-size:11.5px; color:#7c828c;">評価プロファイル <b style="color:#2a2e34;">大型車・初期確認</b> · バッファ <span style="font-family:'JetBrains Mono',monospace;">300m</span></div>
-            <button style="display:flex; align-items:center; gap:6px; padding:8px 13px; border:1.5px solid #c9c4ba; background:#fff; border-radius:6px; font:inherit; font-size:12.5px; font-weight:600; color:#2a2e34; cursor:pointer;" style-hover="border-color:#9a958b;">
+            <button onClick="{{ regenRoutes }}" style="display:flex; align-items:center; gap:6px; padding:8px 13px; border:1.5px solid #c9c4ba; background:#fff; border-radius:6px; font:inherit; font-size:12.5px; font-weight:600; color:#2a2e34; cursor:pointer;" style-hover="border-color:#9a958b;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>
               再生成
             </button>
+            <button onClick="{{ submitProject }}" style="display:flex; align-items:center; gap:6px; padding:8px 13px; border:1.5px solid #c9c4ba; background:#fff; border-radius:6px; font:inherit; font-size:12.5px; font-weight:600; color:#2a2e34; cursor:pointer;" style-hover="border-color:#9a958b;">レビュー依頼</button>
+            <button onClick="{{ approveProject }}" style="display:flex; align-items:center; gap:6px; padding:8px 13px; border:1.5px solid #1f8a4c; background:#e4f3e9; border-radius:6px; font:inherit; font-size:12.5px; font-weight:600; color:#1f8a4c; cursor:pointer;" style-hover="background:#d3ecdb;">承認</button>
           </div>
         </div>
+
+        <sc-if value="{{ apiNotice }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:none; background:#e4f3e9; border-bottom:1px solid #bfe3cf; padding:8px 20px; font-size:12px; color:#1f6b3d;">{{ apiNotice }}</div>
+        </sc-if>
+        <sc-if value="{{ apiError }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:none; background:#f9e2e0; border-bottom:1px solid #ecb1ab; padding:8px 20px; font-size:12px; color:#a01b13;">{{ apiError }}</div>
+        </sc-if>
 
         <div style="flex:1; display:flex; min-height:0;">
 
@@ -454,7 +481,7 @@
                 <span style="width:54px; height:5px; border:1.5px solid #6b7079; border-top:none; display:inline-block;"></span>
                 <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#5e646c;">参考</span>
               </div>
-              <div style="font-size:10px; color:#8a8f98; background:rgba(237,233,223,0.85); padding:2px 6px; border-radius:4px;">背景地図 © OpenStreetMap contributors。ルート線・注意箇所はサンプル表示で、実ルート探索・実ハザード抽出は次段階です。</div>
+              <div style="font-size:10px; color:#8a8f98; background:rgba(237,233,223,0.85); padding:2px 6px; border-radius:4px;">背景地図 © OpenStreetMap contributors。ルート線・注意箇所は API 評価結果を表示します（実データ未連携時はサンプル）。</div>
             </div>
           </div>
 
@@ -561,13 +588,13 @@
               <div style="margin-top:8px; display:flex; gap:8px;">
                 <span style="width:26px; height:26px; flex:none; border-radius:50%; background:#2b6cb0; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;">中</span>
                 <div style="flex:1; background:#faf8f3; border:1px solid #e6e2d9; border-radius:8px; padding:8px 10px;">
-                  <div style="font-size:11px; color:#9aa0a7;">中村 健三 · 06/18 14:20</div>
-                  <div style="font-size:12.5px; color:#3a3f46; margin-top:3px; line-height:1.5;">道路管理者へ橋梁台帳を照会予定。協力会社にも過去通行実績を確認。</div>
+                  <div style="font-size:11px; color:#9aa0a7;">確認コメントはサーバーの監査ログに記録されます</div>
+                  <div style="font-size:12.5px; color:#3a3f46; margin-top:3px; line-height:1.5;">ステータス変更・コメント登録後、管理設定の監査ログから確認できます。</div>
                 </div>
               </div>
               <div style="margin-top:9px; display:flex; gap:8px;">
-                <input placeholder="確認結果・コメントを追記" style="flex:1; padding:9px 11px; border:1.5px solid #d4cfc4; border-radius:7px; font:inherit; font-size:12.5px; outline:none;">
-                <button style="padding:0 14px; background:#1a1d21; border:none; border-radius:7px; color:#fff; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">登録</button>
+                <input value="{{ riskComment }}" onInput="{{ onRiskComment }}" placeholder="確認結果・コメントを追記" style="flex:1; padding:9px 11px; border:1.5px solid #d4cfc4; border-radius:7px; font:inherit; font-size:12.5px; outline:none;">
+                <button onClick="{{ submitRiskComment }}" style="padding:0 14px; background:#1a1d21; border:none; border-radius:7px; color:#fff; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">{{ riskConfirmBtnLabel }}</button>
               </div>
             </div>
             </sc-if>
@@ -582,7 +609,7 @@
           <div>
             <div style="font-family:'Space Grotesk',sans-serif; font-size:11.5px; font-weight:600; letter-spacing:.16em; color:#8a8f98;">RISK MEMO</div>
             <h1 style="margin:5px 0 0; font-size:24px; font-weight:700;">搬入リスクメモ</h1>
-            <div style="margin-top:6px; font-size:13px; color:#5e646c;">公開データから自動生成した初期検討メモです。確認結果を追記し、施工計画・協議資料のたたき台として利用します。</div>
+            <div style="margin-top:6px; font-size:13px; color:#5e646c;">公開データから自動生成した初期検討メモです。確認結果を追記し、施工計画・協議資料のたたき台として利用します。<span style="color:#b07d12; font-weight:600;">（この画面は表示サンプルです。実データはレポート出力画面から取得してください。）</span></div>
           </div>
           <div style="display:flex; gap:10px;">
             <button onClick="{{ goReport }}" style="display:flex; align-items:center; gap:7px; padding:9px 14px; background:#fff; border:1.5px solid #c9c4ba; border-radius:6px; font:inherit; font-size:12.5px; font-weight:600; color:#2a2e34; cursor:pointer;">レポート出力へ</button>
@@ -593,7 +620,7 @@
 
           <div style="background:#fff; border:1.5px solid #d8d4cc; border-radius:8px; overflow:hidden;">
             <div style="display:flex; align-items:center; justify-content:space-between; padding:11px 16px; background:#1a1d21; color:#cfd4da;">
-              <div style="display:flex; align-items:center; gap:8px; font-size:12px; font-family:'JetBrains Mono',monospace;"><span style="width:9px;height:9px;border-radius:50%;background:#ff6a00;"></span>risk_memo_PRJ-2418.md</div>
+              <div style="display:flex; align-items:center; gap:8px; font-size:12px; font-family:'JetBrains Mono',monospace;"><span style="width:9px;height:9px;border-radius:50%;background:#ff6a00;"></span>{{ reportFileName }}</div>
               <div style="display:flex; gap:7px;"><span style="font-size:11px; padding:2px 8px; border-radius:4px; background:#23272d;">自動生成</span></div>
             </div>
             <div style="padding:26px 30px; max-height:none;">
@@ -700,10 +727,17 @@
           <div style="margin-top:6px; font-size:13px; color:#5e646c;">ルート比較表・搬入リスクメモを社内レビューや協議資料向けに出力します。出典・取得日時・免責文を含みます。</div>
         </div>
 
+        <sc-if value="{{ apiError }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:14px; background:#f9e2e0; border:1.5px solid #ecb1ab; border-radius:8px; padding:11px 14px; font-size:12.5px; color:#a01b13;">{{ apiError }}</div>
+        </sc-if>
+        <sc-if value="{{ apiNotice }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:14px; background:#e4f3e9; border:1.5px solid #bfe3cf; border-radius:8px; padding:11px 14px; font-size:12.5px; color:#1f6e3d;">{{ apiNotice }}</div>
+        </sc-if>
+
         <div style="display:grid; grid-template-columns:1fr 300px; gap:20px; align-items:start;">
           <div>
             <div style="display:flex; gap:8px; margin-bottom:14px;">
-              <sc-for list="{{ reportFormats }}" as="f" hint-placeholder-count="4">
+              <sc-for list="{{ reportFormats }}" as="f" hint-placeholder-count="3">
                 <button onClick="{{ f.onClick }}" style="padding:8px 16px; border-radius:7px; border:1.5px solid {{ f.border }}; background:{{ f.bg }}; color:{{ f.fg }}; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">{{ f.label }}</button>
               </sc-for>
             </div>
@@ -711,7 +745,10 @@
             <div style="background:#fff; border:1.5px solid #d8d4cc; border-radius:8px; overflow:hidden;">
               <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 15px; background:#1a1d21; color:#cfd4da;">
                 <div style="display:flex; align-items:center; gap:8px; font-size:12px; font-family:'JetBrains Mono',monospace;"><span style="width:9px;height:9px;border-radius:50%;background:#ff6a00;"></span>{{ reportFileName }}</div>
-                <button style="font-size:11px; padding:3px 10px; border-radius:5px; background:#23272d; color:#cfd4da; border:none; font:inherit; cursor:pointer;">コピー</button>
+                <div style="display:flex; gap:7px;">
+                  <button onClick="{{ downloadReport }}" style="font-size:11px; padding:3px 10px; border-radius:5px; background:#ff6a00; color:#fff; border:none; font:inherit; cursor:pointer;">ダウンロード</button>
+                  <button style="font-size:11px; padding:3px 10px; border-radius:5px; background:#23272d; color:#cfd4da; border:none; font:inherit; cursor:pointer;">コピー</button>
+                </div>
               </div>
 
               <sc-if value="{{ showCode }}" hint-placeholder-val="{{ true }}">
@@ -721,7 +758,7 @@
               <sc-if value="{{ showRendered }}" hint-placeholder-val="{{ false }}">
                 <div style="padding:28px 32px;">
                   <div style="font-size:20px; font-weight:700; padding-bottom:9px; border-bottom:2px solid #1a1d21;">搬入ルート初期検討メモ</div>
-                  <div style="font-size:13px; color:#9aa0a7; margin-top:6px;">第二期 護岸ブロック据付工事 ／ 2026/06/19</div>
+                  <div style="font-size:13px; color:#9aa0a7; margin-top:6px;">{{ activeProjectName }} ／ {{ todayLabel }}</div>
                   <div style="margin-top:18px; font-size:13px; font-weight:700; color:#ff6a00;">ルート候補比較</div>
                   <div style="margin-top:9px; border:1px solid #e6e2d9; border-radius:7px; overflow:hidden;">
                     <div style="display:grid; grid-template-columns:1.6fr 60px 60px 90px; background:#f6f4ef; padding:8px 12px; font-size:11px; font-weight:700; color:#7c828c; gap:8px;"><span>候補</span><span style="text-align:right;">距離</span><span style="text-align:right;">時間</span><span>評価</span></div>
@@ -730,6 +767,12 @@
                     </sc-for>
                   </div>
                   <div style="margin-top:16px; padding:12px 14px; background:#fef3d4; border:1px solid #ecd28a; border-radius:7px; font-size:11.5px; color:#5a4a16; line-height:1.55;">本資料は公開データに基づく初期検討資料であり、通行可否を保証するものではありません。最終判断には道路管理者等による追加確認が必要です。</div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isPdf }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:26px 30px; text-align:center; color:#5e646c; font-size:13px; line-height:1.8;">
+                  PDF は「ダウンロード」ボタンから取得できます（報告書に本番利用禁止の注意文を含みます）。
                 </div>
               </sc-if>
             </div>
@@ -747,20 +790,17 @@
               </div>
             </div>
 
-            <button style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; background:{{ accent }}; border:none; border-radius:8px; font:inherit; font-size:13px; font-weight:700; color:#fff; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.18);" style-hover="background:#f26200;">
+            <button onClick="{{ downloadReport }}" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; background:{{ accent }}; border:none; border-radius:8px; font:inherit; font-size:13px; font-weight:700; color:#fff; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.18);" style-hover="background:#f26200;">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M5 19h14"/></svg>
               この形式でダウンロード
             </button>
-            <button style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; background:#fff; border:1.5px solid #c9c4ba; border-radius:8px; font:inherit; font-size:12.5px; font-weight:600; color:#2a2e34; cursor:pointer;" style-hover="border-color:#9a958b;">
-              添付資料パッケージを作成（ZIP）
+            <button disabled title="次フェーズで対応予定" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; background:#fff; border:1.5px solid #ddd9d0; border-radius:8px; font:inherit; font-size:12.5px; font-weight:600; color:#9aa0a7; cursor:not-allowed;">
+              添付資料パッケージ（ZIP）＝ 次フェーズ対応
             </button>
 
             <div style="background:#fff; border:1.5px solid #d8d4cc; border-radius:8px; overflow:hidden;">
               <div style="padding:13px 16px; border-bottom:1.5px solid #ece9e2; font-weight:700; font-size:14px;">確認履歴</div>
-              <div style="padding:10px 16px 13px; display:flex; flex-direction:column; gap:9px;">
-                <div style="font-size:11.5px; color:#5e646c; line-height:1.5;"><b>中村 健三</b> がメモを生成 <span style="font-family:'JetBrains Mono',monospace; color:#9aa0a7;">06/18 14:20</span></div>
-                <div style="font-size:11.5px; color:#5e646c; line-height:1.5;"><b>中村 健三</b> が確認ステータスを更新 <span style="font-family:'JetBrains Mono',monospace; color:#9aa0a7;">06/18 14:35</span></div>
-              </div>
+              <div style="padding:10px 16px 13px; font-size:11.5px; color:#7c828c; line-height:1.6;">操作履歴はサーバーの監査ログ（audit_logs）に記録され、管理設定画面から閲覧・CSV エクスポートできます。</div>
             </div>
           </div>
         </div>
@@ -772,6 +812,7 @@
           <div style="font-family:'Space Grotesk',sans-serif; font-size:11.5px; font-weight:600; letter-spacing:.16em; color:#8a8f98;">ADMIN</div>
           <h1 style="margin:5px 0 0; font-size:24px; font-weight:700;">管理設定</h1>
           <div style="margin-top:6px; font-size:13px; color:#5e646c;">データソース接続、評価ルール、権限、操作ログを管理します。APIキーはマスク表示され、変更は監査ログに記録されます。</div>
+          <button onClick="{{ refreshAdmin }}" style="margin-top:10px; font-size:12px; padding:7px 12px; border-radius:6px; background:#fff; border:1.5px solid #c9c4ba; font:inherit; font-weight:600; color:#5e646c; cursor:pointer;">データソース・監査ログを更新</button>
         </div>
 
         <div style="background:#fff; border:1.5px solid #d8d4cc; border-radius:8px; overflow:hidden; margin-bottom:20px;">
@@ -852,10 +893,10 @@
         <div style="max-width:880px; margin:0 auto;">
           <div style="text-align:center; margin-bottom:22px;">
             <div style="display:inline-flex; align-items:center; gap:7px; font-family:'Space Grotesk',sans-serif; font-size:11.5px; font-weight:600; letter-spacing:.16em; color:#8a8f98;">
-              <span style="width:7px; height:7px; border-radius:50%; background:{{ accent }};"></span>KNOWLEDGE · AI SEARCH
+              <span style="width:7px; height:7px; border-radius:50%; background:{{ accent }};"></span>KNOWLEDGE · RULE SEARCH
             </div>
             <h1 style="margin:8px 0 0; font-size:25px; font-weight:700;">ナレッジ検索</h1>
-            <div style="margin-top:7px; font-size:13px; color:#5e646c;">公開データ・社内の通行実績・過去案件を横断してAIが回答します。出典は要レビュー（AI生成＝信頼度E）です。</div>
+            <div style="margin-top:7px; font-size:13px; color:#5e646c;">登録された確認ルール（橋梁・高さ・狭隘・学校・特車等）から安全側のガイダンスと確認先を提示します。決定論的応答・信頼度E・要レビューです（生成AIは使用していません）。</div>
           </div>
 
           <div style="display:flex; gap:10px; background:#fff; border:1.5px solid #c9c4ba; border-radius:11px; padding:8px 8px 8px 16px; box-shadow:0 2px 10px rgba(0,0,0,0.06);">
@@ -863,7 +904,7 @@
             <input value="{{ kQuery }}" onInput="{{ onKInput }}" onKeyDown="{{ onKKey }}" placeholder="搬入ルート・注意地点・過去案件をAIに質問" style="flex:1; border:none; outline:none; font:inherit; font-size:14.5px; background:transparent; color:#1b2330; align-self:center;">
             <button onClick="{{ runKSearch }}" style="flex:none; display:flex; align-items:center; gap:7px; padding:10px 18px; background:{{ accent }}; border:none; border-radius:8px; font:inherit; font-size:13.5px; font-weight:700; color:#fff; cursor:pointer;" style-hover="filter:brightness(1.05);">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
-              AI検索
+              検索
             </button>
           </div>
 
@@ -889,7 +930,7 @@
             <div style="margin-top:22px; background:#fff; border:1.5px solid #d8d4cc; border-radius:10px; padding:22px;">
               <div style="display:flex; align-items:center; gap:11px; color:#5e646c; font-size:13px;">
                 <span style="width:17px; height:17px; border:2px solid #e0dccf; border-top-color:{{ accent }}; border-radius:50%; display:inline-block; animation:spin .7s linear infinite;"></span>
-                AIが公開データと社内ナレッジを検索しています…
+                確認ルールを検索しています…
               </div>
               <div style="margin-top:16px; display:flex; flex-direction:column; gap:9px;">
                 <div style="height:11px; border-radius:5px; background:#efece6; width:92%; animation:kpulse 1.2s ease-in-out infinite;"></div>
@@ -908,7 +949,7 @@
               <div style="background:#fff; border:1.5px solid #d8d4cc; border-radius:10px; overflow:hidden;">
                 <div style="display:flex; align-items:center; gap:9px; padding:13px 18px; border-bottom:1.5px solid #ece9e2;">
                   <span style="width:24px; height:24px; border-radius:6px; background:{{ accent }}; display:flex; align-items:center; justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/></svg></span>
-                  <span style="font-weight:700; font-size:14px;">AIによる回答</span>
+                  <span style="font-weight:700; font-size:14px;">ルールによる回答</span>
                   <span style="margin-left:auto; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:3px; background:#eef0f2; color:#79808a;">信頼度 E · 要レビュー</span>
                 </div>
                 <div style="padding:18px 20px; font-size:13.5px; line-height:1.85; color:#2a2e34; white-space:pre-wrap;">{{ kAnswer }}</div>
@@ -937,7 +978,7 @@
                   </sc-for>
                 </div>
                 <div style="display:flex; gap:9px; align-items:flex-start; padding:11px 13px; background:#fff7ee; border:1px solid #f3d8b8; border-radius:8px; font-size:11px; color:#7a5a1a; line-height:1.55;">
-                  AI生成のため誤りを含む可能性があります。必ず一次情報で確認してください。
+                  ルール応答のため情報が古い場合があります。必ず一次情報（道路管理者・警察・現地確認）で確認してください。
                 </div>
               </div>
             </div>
@@ -952,7 +993,7 @@
           <div>
             <div style="font-family:'Space Grotesk',sans-serif; font-size:11.5px; font-weight:600; letter-spacing:.16em; color:#8a8f98;">FACILITY DICTIONARY</div>
             <h1 style="margin:5px 0 0; font-size:24px; font-weight:700;">周辺施設辞書</h1>
-            <div style="margin-top:6px; font-size:13px; color:#5e646c;">社内で登録した注意地点・通行実績の辞書です。次回類似現場の検討時に参照できます。</div>
+            <div style="margin-top:6px; font-size:13px; color:#5e646c;">社内で登録した注意地点・通行実績の辞書です。次回類似現場の検討時に参照できます。<span style="color:#b07d12; font-weight:600;">（本画面はサンプル表示。社内辞書・DB 連携は次フェーズ）</span></div>
           </div>
           <div style="display:flex; gap:10px; align-items:center;">
             <div style="display:flex; align-items:center; gap:8px; background:#fff; border:1.5px solid #c9c4ba; border-radius:7px; padding:8px 12px;">
@@ -1068,13 +1109,13 @@
             <div style="background:#fff; border:1.5px solid #d8d4cc; border-radius:8px; overflow:hidden;">
               <div style="padding:13px 18px; border-bottom:1.5px solid #ece9e2; display:flex; align-items:center; gap:8px;">
                 <span style="font-weight:700; font-size:14px;">API・外部連携</span>
-                <span style="font-size:9.5px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#15181c; background:{{ accent }}; border-radius:3px; padding:1.5px 5px;">AI</span>
+                <span style="font-size:9.5px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#15181c; background:{{ accent }}; border-radius:3px; padding:1.5px 5px;">連携</span>
               </div>
               <div style="padding:15px 18px;">
-                <div style="font-size:12px; color:#6b7079; line-height:1.55; margin-bottom:13px;">ナレッジ検索のAI回答に使用する <b>Perplexity API</b> のキー。フロントエンドには露出せず Secrets に保存され、マスク表示されます。</div>
-                <label style="display:block; font-size:11.5px; font-weight:600; color:#6b7079;">Perplexity API キー</label>
+                <div style="font-size:12px; color:#6b7079; line-height:1.55; margin-bottom:13px;">バックエンド認証用の API キー（Bearer）。ブラウザの sessionStorage にのみ保存され、Git・サーバー・ログへは保存されません。実運用では Entra ID 連携を推奨します。</div>
+                <label style="display:block; font-size:11.5px; font-weight:600; color:#6b7079;">API キー（任意）</label>
                 <div style="margin-top:6px; display:flex; gap:8px;">
-                  <input type="password" value="{{ apiKey }}" onInput="{{ onApiInput }}" placeholder="pplx-xxxxxxxxxxxxxxxxxxxx" style="flex:1; padding:9px 11px; border:1.5px solid #d4cfc4; border-radius:7px; font:inherit; font-size:12.5px; font-family:'JetBrains Mono',monospace; outline:none; letter-spacing:.04em;">
+                  <input type="password" value="{{ apiKey }}" onInput="{{ onApiInput }}" placeholder="APIキーを入力（未設定時は保存しません）" style="flex:1; padding:9px 11px; border:1.5px solid #d4cfc4; border-radius:7px; font:inherit; font-size:12.5px; font-family:'JetBrains Mono',monospace; outline:none; letter-spacing:.04em;">
                 </div>
                 <div style="margin-top:9px; display:flex; align-items:center; gap:8px;">
                   <span style="width:8px; height:8px; border-radius:50%; flex:none; background:{{ apiStatusDot }};"></span>

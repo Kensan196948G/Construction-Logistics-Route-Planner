@@ -78,6 +78,19 @@ GET /api/health
 | `disk-space-critical` | ディスク使用率 95% 超 | CRITICAL | 書き込み不能リスク |
 | `process-down` | uvicorn プロセス不在 | CRITICAL | サービス停止 |
 | `api-error-rate` | 直近 5 分のエラー率 5% 超 | WARNING | API 品質劣化 |
+
+## 追加監視項目（2026-08-12）
+
+| ルール | 条件 | レベル | 説明 |
+|---|---|---|---|
+| `knowledge-rate-limit` | ナレッジ検索が 429 を多発 | WARNING | IP あたり 30 回/分の制限に到達（濫用または運用変更の兆候） |
+| `security-header-missing` | `/api/health` レスポンスに CSP／X-Frame-Options が無い | CRITICAL | リバースプロキシ等の設定崩れの可能性 |
+| `db-health-status` | `/api/health` の `db.status` が `ok` 以外 | CRITICAL | DB 断・タイムアウト（1.5 秒プローブ） |
+
+```bash
+# セキュリティヘッダーの定期確認例（cron 5 分間隔）
+curl -sI "$MONITOR_BASE_URL/api/health" | grep -qi "content-security-policy" || echo "[CRITICAL] CSP missing"
+```
 | `backup-failure` | バックアップスクリプト終了コード != 0 | WARNING | バックアップ未取得 |
 
 ---

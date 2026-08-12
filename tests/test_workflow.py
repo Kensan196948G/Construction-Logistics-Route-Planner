@@ -112,3 +112,54 @@ async def test_site_user_can_confirm_but_not_approve(client: AsyncClient, monkey
 
     denied = await client.post(f"/api/projects/{project_id}/approve", json={}, headers=headers)
     assert denied.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_re_evaluation_preserves_risk_confirmation(client: AsyncClient) -> None:
+    """Re-evaluating a route must not silently discard confirmation results."""
+
+    project_id, refs = await _evaluated_project(client)
+
+    confirmed = await client.post(
+        f"/api/routes/{refs['route_id']}/risks/{refs['risk_id']}/confirm",
+        json={"status": "confirmed", "comment": "道路管理者に台帳確認済み"},
+    )
+    assert confirmed.status_code == 200
+
+    re_evaluated = await client.post(f"/api/routes/{refs['route_id']}/evaluate", json={})
+    assert re_evaluated.status_code == 200
+    body = re_evaluated.json()
+
+    # The risk id changes after re-evaluation, but the rule+feature identity is
+    # stable; the API must report the carried-over confirmation status.
+    assert any(
+        risk["confirmation_status"] == "confirmed"
+        for risk in body["risks"]
+        if risk["rule_id"] == body["risks"][0]["rule_id"]
+    )
+
+    listed = await client.get(f"/api/routes/{refs['route_id']}/risks")
+    assert listed.status_code == 200
+    assert any(risk["confirmation_status"] == "confirmed" for risk in listed.json())
+
+
+@pytest.mark.asyncio
+async def test_regenerating_routes_keeps_latest_generation_only(client: AsyncClient) -> None:
+    """Repeated route generation must not duplicate candidates in list/report views."""
+
+    created = await client.post("/api/projects", json=_payload())
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+
+    first = await client.post(f"/api/projects/{project_id}/routes/generate", json={})
+    assert first.status_code == 200
+    first_count = first.json()["generated_count"]
+    assert first_count >= 3
+
+    second = await client.post(f"/api/projects/{project_id}/routes/generate", json={})
+    assert second.status_code == 200
+    assert second.json()["generated_count"] == first_count
+
+    listed = await client.get(f"/api/projects/{project_id}/routes")
+    assert listed.status_code == 200
+    assert len(listed.json()) == first_count

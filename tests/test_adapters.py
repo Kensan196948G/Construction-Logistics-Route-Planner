@@ -69,3 +69,7 @@ async def test_overpass_disabled_returns_sample(monkeypatch) -> None:
 
     assert features
     assert "sample overlay" in features[0].source
+    # Sample-generated features must never masquerade as official/community
+    # data: the reliability rank is E (estimated) and a sample flag is set.
+    assert all(feature.data_quality.value == "E" for feature in features)
+    assert all(feature.attributes.get("sample") is True for feature in features)

@@ -22,6 +22,7 @@ Construction Logistics Route Planner（建設物流ルートプランナー）�
 | GET | `/` | SPA UI | なし |
 | GET | `/api/health` | サービス状態確認 | なし |
 | GET | `/api/me` | 現在の利用者情報 | API Key / OIDC |
+| GET | `/api/admin/audit-logs/export` | 監査ログ CSV エクスポート（admin） | API Key / OIDC |
 | GET | `/api/projects` | 案件一覧 | API Key |
 | POST | `/api/projects` | 案件作成（planner 以上） | API Key / OIDC |
 | GET | `/api/projects/{id}` | 案件詳細 | API Key |
@@ -53,6 +54,14 @@ Construction Logistics Route Planner（建設物流ルートプランナー）�
 | SQLite (state.db) | ローカルファイル | DB 損傷時は全データ消失。バックアップ必須 |
 | OSM タイルサーバー | tile.openstreetmap.org | 障害時は地図表示不可（SPA のルート検討画面が白地図） |
 | Python パッケージ | fastapi, uvicorn, sqlalchemy, alembic 等 | 実行環境の破損は起動不能 |
+
+### 本番モードの認証要件
+
+`PRODUCTION_MODE=1` で運用する場合、`APP_API_KEY` または Entra ID
+（`ENTRA_TENANT_ID`＋`ENTRA_CLIENT_ID`）の設定が必須です。未設定のまま保護 API を
+呼ぶと 503 が返り、認証未設定の本番稼働は構造的に成立しません。
+ナレッジ検索は IP あたり 30 回/分、監査ログ CSV・帳票 CSV は数式インジェクション
+対策済みです。
 
 ---
 

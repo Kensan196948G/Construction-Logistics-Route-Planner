@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import asyncio
+import csv
+import json
 import os
+import time
+from collections import defaultdict, deque
+from io import StringIO
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters import OSMOverpassAdapter
 from app.auth import UserInfo, get_current_user, require_role
-from app.db import get_session
+from app.db import engine, get_session
 from app.knowledge import search_knowledge
 from app.models import (
     DISCLAIMER,
@@ -32,7 +39,7 @@ from app.models import (
     WorkflowRequest,
     now_utc,
 )
-from app.reporting import render_csv, render_markdown, render_pdf
+from app.reporting import _csv_safe, render_csv, render_markdown, render_pdf
 from app.repository import (
     confirm_route_risk,
     create_audit_log,
@@ -65,6 +72,54 @@ AdminRole = require_role("admin")
 ConfirmerRole = require_role("admin", "planner", "site_user")
 
 
+# Public knowledge search is the only unauthenticated write endpoint; cap it
+# per client IP to keep the deterministic responder cheap and abuse-resistant.
+_KNOWLEDGE_MAX_REQUESTS = 30
+_KNOWLEDGE_WINDOW_SECONDS = 60.0
+_KNOWLEDGE_MAX_CLIENTS = 1024
+_knowledge_hits: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _knowledge_rate_allowed(client_ip: str) -> bool:
+    now = time.monotonic()
+    if client_ip not in _knowledge_hits and len(_knowledge_hits) >= _KNOWLEDGE_MAX_CLIENTS:
+        _knowledge_hits.pop(next(iter(_knowledge_hits)))
+    window = _knowledge_hits[client_ip]
+    while window and now - window[0] > _KNOWLEDGE_WINDOW_SECONDS:
+        window.popleft()
+    if len(window) >= _KNOWLEDGE_MAX_REQUESTS:
+        return False
+    window.append(now)
+    return True
+
+
+@app.middleware("http")
+async def security_headers_and_limits(request: Request, call_next):
+    if request.url.path == "/api/knowledge/search" and request.method == "POST":
+        client_ip = request.client.host if request.client else "unknown"
+        if not _knowledge_rate_allowed(client_ip):
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={"detail": "検索リクエストが集中しています。少し待ってから再試行してください。"},
+            )
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org; "
+        "connect-src 'self'; "
+        "base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+    )
+    return response
+
+
 def sample_mode_enabled() -> bool:
     """Whether the deployment is still in PoC/sample mode.
 
@@ -77,12 +132,32 @@ def sample_mode_enabled() -> bool:
     return os.getenv("PRODUCTION_MODE", "").strip().lower() not in {"1", "true", "yes", "on"}
 
 
+async def _db_healthy() -> tuple[bool, str]:
+    """Best-effort database reachability probe for /api/health.
+
+    The check is bounded to ~1.5s so the endpoint never stalls the Docker
+    HEALTHCHECK or the external monitor when the database is unreachable.
+    """
+
+    try:
+        async with asyncio.timeout(1.5):
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+        return True, "ok"
+    except TimeoutError:
+        return False, "timeout"
+    except Exception:
+        return False, "error"
+
+
 @app.get("/api/health")
-def health() -> dict[str, object]:
+async def health() -> dict[str, object]:
+    db_ok, db_status = await _db_healthy()
     return {
         "status": "ok",
         "service": "construction-logistics-route-planner",
         "version": "0.1.0",
+        "db": {"status": db_status, "dialect": engine.dialect.name},
         "sample_mode": sample_mode_enabled(),
         "sample_data_notice": SAMPLE_DATA_NOTICE,
         "disclaimer": DISCLAIMER,
@@ -100,8 +175,13 @@ async def api_list_projects(session: DbSession) -> list[Project]:
 
 
 @app.post("/api/projects", status_code=status.HTTP_201_CREATED, dependencies=[PlannerRole])
-async def api_create_project(payload: ProjectCreate, request: Request, session: DbSession) -> Project:
-    project = await create_project(session, payload)
+async def api_create_project(
+    payload: ProjectCreate,
+    request: Request,
+    session: DbSession,
+    user: Annotated[UserInfo, Depends(get_current_user)],
+) -> Project:
+    project = await create_project(session, payload, owner_user_id=user.user_id)
     await _audit(session, "project_created", project.id, request)
     return project
 
@@ -136,7 +216,9 @@ async def api_generate_project_routes(
         routes = generate_routes(project, payload.route_types)
 
     if os.getenv("OSM_OVERPASS_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}:
-        osm_features = await _fetch_osm_project_features(project.start, project.destination)
+        osm_features = await _fetch_osm_project_features(
+            project.start, project.destination, radius_m=payload.buffer_m
+        )
         if osm_features:
             for route in routes:
                 route.features = osm_features
@@ -176,6 +258,11 @@ async def api_evaluate_project_route(
     await update_route(session, evaluated)
     await update_project_status(session, route.project_id, "review_required")
     await _audit(session, "route_evaluated", route.project_id, request, {"route_id": route_id})
+    # Re-read from the repository so carried-over confirmation statuses (and
+    # any persistence-level defaults) are part of the response contract.
+    fresh = await get_route(session, route_id)
+    if fresh is not None:
+        evaluated = fresh
     return EvaluationResponse(
         route_id=route_id,
         risk_score=evaluated.risk_score,
@@ -283,6 +370,7 @@ async def api_project_report(
     for route in routes:
         if route.evaluation_status != "evaluated":
             evaluate_route(project, route)
+            await update_route(session, route)
     if format == "pdf":
         pdf_bytes = render_pdf(project, routes)
         await save_report(
@@ -306,6 +394,51 @@ async def api_project_report(
 @app.get("/api/admin/audit-logs", dependencies=[AdminRole])
 async def api_audit_logs(session: DbSession, limit: int = 100) -> list[dict]:
     return await list_audit_logs(session, limit=min(max(limit, 1), 500))
+
+
+@app.get("/api/admin/audit-logs/export", dependencies=[AdminRole])
+async def api_audit_logs_export(session: DbSession, limit: int = 500) -> Response:
+    """Admin-only CSV export of the durable audit trail."""
+
+    logs = await list_audit_logs(session, limit=min(max(limit, 1), 5000))
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "id",
+            "created_at",
+            "user_id",
+            "user_role",
+            "action",
+            "project_id",
+            "target_type",
+            "target_id",
+            "ip_address",
+            "user_agent",
+            "details",
+        ]
+    )
+    for log in logs:
+        writer.writerow(
+            [
+                _csv_safe(log["id"] or ""),
+                _csv_safe(str(log["created_at"] or "")),
+                _csv_safe(log["user_id"] or ""),
+                _csv_safe(log["user_role"] or ""),
+                _csv_safe(log["action"] or ""),
+                _csv_safe(log["project_id"] or ""),
+                _csv_safe(log["target_type"] or ""),
+                _csv_safe(log["target_id"] or ""),
+                _csv_safe(log["ip_address"] or ""),
+                _csv_safe(log["user_agent"] or ""),
+                _csv_safe(json.dumps(log["details"] or {}, ensure_ascii=False)),
+            ]
+        )
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="audit-logs.csv"'},
+    )
 
 
 @app.get("/api/admin/data-sources", dependencies=[AuthenticatedUser])
@@ -374,7 +507,7 @@ async def _require_route(route_id: str, session: AsyncSession) -> RouteCandidate
 
 
 async def _fetch_osm_project_features(
-    start: LocationInput, destination: LocationInput
+    start: LocationInput, destination: LocationInput, radius_m: int = 500
 ) -> list[RouteFeature]:
     """Fetch real OSM features around the origin and destination (max 2 requests)."""
 
@@ -382,7 +515,7 @@ async def _fetch_osm_project_features(
     merged: list[RouteFeature] = []
     seen: set[str] = set()
     for point in (start, destination):
-        for feature in await adapter.fetch_features(point.lat, point.lng, 500):
+        for feature in await adapter.fetch_features(point.lat, point.lng, radius_m):
             if feature.id not in seen:
                 seen.add(feature.id)
                 merged.append(feature)

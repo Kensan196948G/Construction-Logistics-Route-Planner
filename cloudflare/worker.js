@@ -1,4 +1,9 @@
-const BACKEND_ORIGIN = (typeof BACKEND_ORIGIN !== "undefined" ? BACKEND_ORIGIN : null) || "http://localhost:8000";
+// The backend is a FastAPI service (systemd/Docker) reachable over HTTPS; it
+// cannot live inside the Worker. Deployments MUST set BACKEND_ORIGIN to the
+// backend's public URL (e.g. https://route-planner-api.example.com). Leaving
+// it empty makes /api/* fail with a clear 502 instead of silently proxying to
+// a non-existent localhost inside Cloudflare's network.
+const BACKEND_ORIGIN = (typeof BACKEND_ORIGIN !== "undefined" ? BACKEND_ORIGIN : null) || "";
 const ALLOWED_ORIGINS = [
   "https://mirai-dx-platform.com",
   "https://staging.mirai-dx-platform.com",
@@ -8,7 +13,10 @@ const ALLOWED_ORIGINS = [
 const EXCLUDED_HEADERS = new Set(["cf-", "x-forwarded-", "x-real-ip", "content-encoding", "transfer-encoding"]);
 
 function buildApiUrl(pathname, search) {
-  const backend = BACKEND_ORIGIN.replace(/\/+$/, "");
+  const backend = String(BACKEND_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (!/^https?:\/\/.+/i.test(backend)) {
+    return null;
+  }
   return backend + pathname + (search || "");
 }
 
@@ -23,12 +31,10 @@ function corsHeaders(request) {
 
   if (origin && isOriginAllowed(origin)) {
     headers.set("Access-Control-Allow-Origin", origin);
-  } else {
-    headers.set("Access-Control-Allow-Origin", ALLOWED_ORIGINS[0]);
   }
 
   headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-  headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, x-user-id, x-user-role");
+  headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   headers.set("Access-Control-Max-Age", "86400");
   return headers;
 }
@@ -75,6 +81,19 @@ export default {
 
     try {
       const backendUrl = buildApiUrl(pathname, url.search);
+      if (!backendUrl) {
+        return new Response(
+          JSON.stringify({
+            detail: "BACKEND_ORIGIN is not configured",
+            service: "construction-logistics-route-planner",
+            timestamp: new Date().toISOString(),
+          }),
+          {
+            status: 502,
+            headers: { "Content-Type": "application/json", ...Object.fromEntries(corsHeaders(request)) },
+          }
+        );
+      }
       const response = await fetch(backendUrl, {
         method: request.method,
         headers: passthroughHeaders(request),

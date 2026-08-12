@@ -91,7 +91,8 @@ sequenceDiagram
 | ✅ ワークフロー | 案件提出（submit）→ 承認（approve）／差戻し（request-changes）、リスク確認ステータス記録 |
 | 📄 帳票 | Markdown レポート、CSV レポート、PDF レポート |
 | 🔎 ナレッジ検索 | 搬入計画の論点への安全側ガイダンスと確認先の提示（決定論的・信頼度 E・要レビュー） |
-| 🔐 認証 | Entra ID / OIDC（JWT 検証）または API key によるアクセス制御、4 ロール（admin / planner / site_user / viewer）の RBAC |
+| 🔐 認証 | Entra ID / OIDC（JWT 検証）または API key によるアクセス制御、4 ロール（admin / planner / site_user / viewer）の RBAC。`PRODUCTION_MODE=1` では認証未設定時に全保護 API を 503 で拒否（フェイルクローズ） |
+| 🧾 監査 | 全操作の `audit_logs` 永続化＋admin 向け CSV エクスポート |
 | 🖥️ UI | 9 画面のシングルページ UI（ダッシュボード / 案件・条件 / ルート・地図 / 搬入リスクメモ / レポート / ナレッジ / 周辺施設辞書 / 管理 / システム） |
 
 ## ⚠️ サンプル表示の明示（本番利用禁止）
@@ -108,20 +109,20 @@ UI は Claude Design のハンドオフ（`Route Planner.dc.html`）を実装し
 |---|---|---|
 | 📊 ダッシュボード | 案件一覧、要確認件数、データソース接続状態、注意箇所内訳 | ✅ `GET /api/projects` |
 | 📝 案件・条件入力 | 案件情報、地点・経路、車両・積載、搬入条件、回避条件 | ✅ `POST /api/projects` |
-| 🗺️ ルート検討・地図 | ルート候補比較、**実地図（Leaflet + OSM）**、注意箇所ピン、レイヤ切替、確認ステータス更新 | ✅ 背景地図=実データ（OSM）／ルート生成・評価は API 連携 |
-| 🧾 搬入リスクメモ | 確認チェックリスト、確認先、候補サマリ、注意箇所 | サンプル表示 |
-| 📄 レポート出力 | Markdown / CSV / HTML / PDF 相当のプレビュー | ✅ `GET /api/projects/{id}/report` |
-| 🔎 ナレッジ検索 | 論点への安全側ガイダンスと確認先 | ✅ `POST /api/knowledge/search` |
+| 🗺️ ルート検討・地図 | ルート候補比較、**実地図（Leaflet + OSM）**、注意箇所ピン、レイヤ切替、確認ステータス更新 | ✅ 背景地図=実データ（OSM）／ルート生成・評価・確認登録は API 連携 |
+| 🧾 搬入リスクメモ | 確認チェックリスト、確認先、候補サマリ、注意箇所 | 表示サンプル（実データはレポート出力画面） |
+| 📄 レポート出力 | Markdown / CSV / PDF のプレビューとダウンロード | ✅ `GET /api/projects/{id}/report` |
+| 🔎 ナレッジ検索 | 論点への安全側ガイダンスと確認先（決定論的ルール・AI不使用・信頼度 E） | ✅ `POST /api/knowledge/search` |
 | 📍 周辺施設辞書 | 橋梁・トンネル・狭隘・学校・病院・踏切等の辞書とフィルタ | サンプル表示 |
-| 🛠️ 管理設定 | データソース、評価重み、評価ルール、ロール、操作ログ | サンプル表示 |
-| ⚙️ システム設定 | 表示・処理・通知・セキュリティの各トグル、API キー | サンプル表示 |
+| 🛠️ 管理設定 | データソース、評価重み、評価ルール、ロール、操作ログ | データソース・監査ログは実 API 連携／評価ルール等はサンプル表示 |
+| ⚙️ システム設定 | 表示・処理・通知・セキュリティの各トグル、API キー | API キーは sessionStorage 保存＋接続テスト／他はサンプル表示 |
 
-> 起動時に `GET /api/health` で接続性を確認し、案件作成・ルート生成・評価・レポート出力・ナレッジ検索は実 API を呼び出します。API 未接続時はデモデータで動作します。ルート検討画面の背景地図は **Leaflet + OpenStreetMap タイル**の実地図です。
+> 起動時に `GET /api/health` で接続性を確認し、案件一覧・作成、ルート生成・評価、リスク確認登録、レポート出力・ダウンロード、ナレッジ検索、監査ログは実 API を呼び出します。API 未接続時はデモデータで動作します。ルート検討画面の背景地図は **Leaflet + OpenStreetMap タイル**の実地図です。
 
 ### 🗺️ 地図（ルート検討画面）
 
 - **Leaflet（vendored: `app/static/vendor/leaflet/`）+ OpenStreetMap タイル**で実地図を表示。`dc-runtime.js` の `data-keep` により、再描画をまたいで地図インスタンスを保持します（レイヤ切替で地図がリセットされません）。
-- ルート線・注意箇所は、模式座標を実地理座標へアフィン投影したサンプル表示です（**実ルート探索・実ハザード抽出は次段階**＝README ロードマップ Phase 2）。
+- ルート線・注意箇所は API 評価結果（OSRM 実ルート／Overpass 実地物、未連携時はサンプル）を表示します。実データ使用時は `ROUTING_PROVIDER=osrm`・`OSM_OVERPASS_ENABLED=1` を設定してください。
 - タイルは内部評価向けの低頻度利用を想定。本番は専用タイル提供元（自前ホスト等）の利用が必要です（OSM タイル利用ポリシー）。背景地図には **© OpenStreetMap contributors** を表示。`app/static/component.js` の `afterRender()` で URL を差し替えると**地理院タイル**へ切替できます。
 
 ## 🧾 入力条件
@@ -270,6 +271,12 @@ ENTRA_CLIENT_ID='your-client-id'
 
 PoC モード（`PRODUCTION_MODE` 未設定）では `/api/health` が `sample_mode: true` を返します。
 
+### 本番モードのフェイルクローズ
+
+`PRODUCTION_MODE=1` を設定し、かつ `APP_API_KEY` と Entra ID（`ENTRA_TENANT_ID`／`ENTRA_CLIENT_ID`）のどちらも未設定の場合、保護対象 API は **503（Authentication is not configured）** を返して拒否します。PoC モードの「API キー未設定なら誰でも planner」は本番では成立しません。
+
+Entra ID を有効にする場合、`ENTRA_TENANT_ID` のみ設定して `ENTRA_CLIENT_ID` が欠けている場合も 503 で停止します（誤設定の早期顕在化）。API キー比較はタイミング攻撃対策として `hmac.compare_digest` を使用します。
+
 ### ロール別権限（最小 RBAC）
 
 | 操作 | viewer | site_user | planner | admin |
@@ -283,7 +290,7 @@ PoC モード（`PRODUCTION_MODE` 未設定）では `/api/health` が `sample_m
 
 | メソッド | パス | 用途 |
 |---|---|---|
-| `GET` | `/api/health` | サービス状態確認 |
+| `GET` | `/api/health` | サービス状態確認（DB 接続状態 `db.status` を含む） |
 | `GET` | `/api/projects` | 案件一覧 |
 | `POST` | `/api/projects` | 案件作成 |
 | `GET` | `/api/projects/{project_id}` | 案件詳細 |
@@ -301,8 +308,17 @@ PoC モード（`PRODUCTION_MODE` 未設定）では `/api/health` が `sample_m
 | `GET` | `/api/projects/{project_id}/report?format=pdf` | PDF レポート |
 | `GET` | `/api/admin/data-sources` | データソース一覧 |
 | `GET` | `/api/admin/audit-logs` | 監査ログ（admin のみ） |
+| `GET` | `/api/admin/audit-logs/export` | 監査ログ CSV エクスポート（admin のみ） |
 | `GET` | `/api/me` | 現在の利用者情報 |
 | `POST` | `/api/knowledge/search` | ナレッジ検索（安全側ガイダンス・確認先・信頼度 E） |
+
+運用上の防御（追加）:
+
+- 全レスポンスにセキュリティヘッダー（`X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy` / `Permissions-Policy` / CSP）
+- ナレッジ検索は IP あたり 30 回/分のレートリミット（429）
+- CSV エクスポート（レポート・監査ログ）は `=`, `+`, `-`, `@` 始まりのセルを `'` 前置で中和（数式インジェクション対策）
+- ルート再生成は世代管理（`generation` 列）を行い、一覧・帳票は最新世代のみ表示。旧世代は履歴として保持し、再評価時は確認ステータスを引き継ぎ
+- 搬入条件（日時・時間帯・休日・夜間可否）と回避条件は DB に永続化され、案件作成ユーザーも `owner_user_id` として記録
 
 ## 🗺️ 実ルーティングと実データ連携（Phase 1）
 
@@ -337,10 +353,10 @@ CSV は、案件 ID、ルート ID、距離、時間、リスクレベル、リ�
 ```bash
 ruff check .                        # lint
 python3 -m compileall app tests     # 構文・バイトコード確認
-pytest                              # API + 認証 + ワークフロー + ルーティング + 帳票 + E2E（32 tests）
+pytest                              # API + 認証 + ワークフロー + 永続化 + ルーティング + 帳票 + E2E（46 tests）
 bandit -q -r app                    # コードセキュリティスキャン
 for f in app.js component.js dc-runtime.js; do node --check "app/static/$f"; done  # クライアント構文確認
-node tests/js/route_screen.test.mjs # クライアント動作テスト
+node tests/js/route_screen.test.mjs # クライアント動作テスト（13 tests）
 python -m build --wheel && python scripts/check_package_assets.py  # 配布物に静的アセット全同梱を検証
 ```
 
@@ -433,8 +449,15 @@ flowchart LR
     P2["🛰️ Phase 2<br/>Data Integration<br/>OSM / xROAD / 国土数値情報 / PostGIS / Cloudflare"]
     P3["🏗️ Phase 3<br/>Construction DX<br/>許認可・協議履歴 / 協力会社ポータル / 実績学習"]
     P4["📈 Phase 4<br/>Management Intelligence<br/>横断ダッシュボード / KPI / 監査レポート"]
-    P1 --> P2 --> P3 --> P4
+P1 --> P2 --> P3 --> P4
 ```
+
+## 📚 評価・監査文書
+
+- [統合評価・改善報告書（2026-08-12）](docs/evaluation-report-2026-08-12.md)
+- [改善台帳（2026-08-12）](docs/improvement-ledger-2026-08-12.md)
+- [テスト証跡（2026-08-12）](docs/test-evidence-2026-08-12.md)
+- [変更履歴](docs/CHANGELOG.md)
 
 ## 🧑‍⚖️ 免責
 

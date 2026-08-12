@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db_models import (
@@ -17,6 +17,7 @@ from app.db_models import (
     VehicleCondition as DBVehicleCondition,
 )
 from app.models import (
+    DeliveryCondition,
     LocationInput,
     Project,
     ProjectCreate,
@@ -36,6 +37,13 @@ def _db_project_to_pydantic(db: DBProject) -> Project:
     vc = db.vehicle_condition
     start_loc = next((loc for loc in db.locations if loc.location_type == "origin"), None)
     dest_loc = next((loc for loc in db.locations if loc.location_type == "destination"), None)
+
+    delivery = DeliveryCondition(
+        delivery_date=db.delivery_date,
+        time_window=db.time_window or "daytime",
+        holiday=bool(db.holiday),
+        night_delivery_allowed=bool(db.night_delivery_allowed),
+    )
 
     return Project(
         id=db.id,
@@ -69,8 +77,8 @@ def _db_project_to_pydantic(db: DBProject) -> Project:
             special_vehicle_flag=vc.special_vehicle_flag if vc else False,
             notes=vc.notes if vc else None,
         ),
-        delivery=ProjectCreate.model_fields["delivery"].default,
-        avoid_conditions=[],
+        delivery=delivery,
+        avoid_conditions=list(db.avoid_conditions or []),
         notes=db.notes,
     )
 
@@ -80,10 +88,31 @@ def _db_route_to_pydantic(db: DBRouteCandidate) -> RouteCandidate:
         LocationInput(name=seg.name or f"point-{seg.sort_order}", lat=seg.lat, lng=seg.lng)
         for seg in sorted(db.segments, key=lambda s: s.sort_order)
     ]
-    features = [
-        RouteFeature(
+    # Feature-less risks (e.g. "車両高さ未入力") have no lat/lng/source and must
+    # not be materialized as a RouteFeature: their stored risk_type may be
+    # "unknown", which is not a valid RouteFeature.feature_type literal.
+    features_by_risk: dict[str, RouteFeature] = {}
+    for risk in db.risks:
+        if risk.lat is None and risk.lng is None and not risk.source_name:
+            continue
+        feature_type = (
+            risk.risk_type
+            if risk.risk_type
+            in {
+                "bridge",
+                "tunnel",
+                "school",
+                "hospital",
+                "residential",
+                "traffic",
+                "disaster",
+                "osm_quality",
+            }
+            else "osm_quality"
+        )
+        features_by_risk[risk.id] = RouteFeature(
             id=risk.id,
-            feature_type=risk.risk_type,
+            feature_type=feature_type,
             name=risk.title,
             lat=risk.lat or 0,
             lng=risk.lng or 0,
@@ -93,8 +122,6 @@ def _db_route_to_pydantic(db: DBRouteCandidate) -> RouteCandidate:
             data_quality=risk.source_rank or "C",
             attributes={},
         )
-        for risk in db.risks
-    ]
     risks = [
         RiskItem(
             id=risk.id,
@@ -103,11 +130,12 @@ def _db_route_to_pydantic(db: DBRouteCandidate) -> RouteCandidate:
             title=risk.title,
             message=risk.description,
             score=risk.score,
-            feature=features[i] if i < len(features) else None,
+            feature=features_by_risk.get(risk.id),
             confirmation_target=risk.confirmation_target or "",
             evidence=risk.evidence or "",
+            confirmation_status=risk.confirmation_status,
         )
-        for i, risk in enumerate(db.risks)
+        for risk in db.risks
     ]
 
     return RouteCandidate(
@@ -118,7 +146,7 @@ def _db_route_to_pydantic(db: DBRouteCandidate) -> RouteCandidate:
         distance_km=db.distance_km,
         duration_min=db.duration_min,
         geometry=geometry,
-        features=features,
+        features=list(features_by_risk.values()),
         risk_score=db.risk_score,
         risk_level=db.risk_level,
         evaluation_status=db.evaluation_status,
@@ -171,7 +199,11 @@ def _pydantic_route_to_db(route: RouteCandidate) -> DBRouteCandidate:
     return db_route
 
 
-async def create_project(session: AsyncSession, payload: ProjectCreate) -> Project:
+async def create_project(
+    session: AsyncSession,
+    payload: ProjectCreate,
+    owner_user_id: str | None = None,
+) -> Project:
     now = _utcnow()
     db_project = DBProject(
         project_name=payload.project_name,
@@ -179,6 +211,12 @@ async def create_project(session: AsyncSession, payload: ProjectCreate) -> Proje
         owner_type=payload.owner_type,
         planner=payload.planner,
         status="draft",
+        owner_user_id=owner_user_id,
+        delivery_date=payload.delivery.delivery_date,
+        time_window=payload.delivery.time_window,
+        holiday=payload.delivery.holiday,
+        night_delivery_allowed=payload.delivery.night_delivery_allowed,
+        avoid_conditions=list(payload.avoid_conditions or []),
         notes=payload.notes,
         created_at=now,
         updated_at=now,
@@ -263,8 +301,23 @@ async def update_project_status(session: AsyncSession, project_id: str, status: 
 
 
 async def save_routes(session: AsyncSession, routes: list[RouteCandidate]) -> None:
+    """Save a new generation of route candidates for a project.
+
+    Old generations are kept as history (audit trail) instead of being deleted,
+    so risk confirmations attached to earlier evaluations are never destroyed.
+    List/report queries only expose the latest generation.
+    """
+
+    if not routes:
+        return
+    project_id = routes[0].project_id
+    max_generation = await session.scalar(
+        select(func.max(DBRouteCandidate.generation)).where(DBRouteCandidate.project_id == project_id)
+    )
+    generation = (max_generation or 0) + 1
     for route in routes:
         db_route = _pydantic_route_to_db(route)
+        db_route.generation = generation
         session.add(db_route)
     await session.commit()
 
@@ -272,9 +325,18 @@ async def save_routes(session: AsyncSession, routes: list[RouteCandidate]) -> No
 async def get_project_routes(session: AsyncSession, project_id: str) -> list[RouteCandidate]:
     from sqlalchemy.orm import selectinload
 
+    max_generation = (
+        select(func.max(DBRouteCandidate.generation))
+        .where(DBRouteCandidate.project_id == project_id)
+        .scalar_subquery()
+    )
     stmt = (
         select(DBRouteCandidate)
-        .where(DBRouteCandidate.project_id == project_id)
+        .where(
+            DBRouteCandidate.project_id == project_id,
+            DBRouteCandidate.generation == max_generation,
+        )
+        .order_by(DBRouteCandidate.created_at.asc())
         .options(
             selectinload(DBRouteCandidate.segments),
             selectinload(DBRouteCandidate.risks),
@@ -303,44 +365,101 @@ async def get_route(session: AsyncSession, route_id: str) -> RouteCandidate | No
 
 
 async def update_route(session: AsyncSession, route: RouteCandidate) -> None:
-    from sqlalchemy import delete as sa_delete
+    from sqlalchemy.orm import selectinload
 
-    await session.execute(sa_delete(DBRouteRisk).where(DBRouteRisk.route_id == route.id))
-
-    stmt = select(DBRouteCandidate).where(DBRouteCandidate.id == route.id)
+    stmt = (
+        select(DBRouteCandidate)
+        .where(DBRouteCandidate.id == route.id)
+        .options(selectinload(DBRouteCandidate.risks).selectinload(DBRouteRisk.comments))
+    )
     result = await session.execute(stmt)
     db_route = result.scalar_one_or_none()
     if db_route is None:
         return
+
+    # Preserve confirmation results across re-evaluations: the risk rows are
+    # replaced (new ids, fresh evidence), but a confirmed/needs_review status
+    # must not silently disappear. Matching is by rule + feature coordinates,
+    # which are stable across evaluations of the same candidate.
+    carry = _confirmation_carry_map(db_route.risks)
+    for existing_risk in list(db_route.risks):
+        await session.delete(existing_risk)
+
     db_route.risk_score = route.risk_score
     db_route.risk_level = route.risk_level.value
     db_route.evaluation_status = route.evaluation_status
     db_route.summary = route.summary
 
     for risk in route.risks:
-        session.add(
-            DBRouteRisk(
-                id=risk.id,
-                route_id=route.id,
-                rule_id=risk.rule_id,
-                risk_type=risk.feature.feature_type if risk.feature else "unknown",
-                risk_level=risk.level.value,
-                title=risk.title,
-                description=risk.message,
-                score=risk.score,
-                source_name=risk.feature.source if risk.feature else None,
-                source_rank=risk.feature.data_quality.value if risk.feature else None,
-                lat=risk.feature.lat if risk.feature else None,
-                lng=risk.feature.lng if risk.feature else None,
-                confirmation_target=risk.confirmation_target,
-                evidence=risk.evidence,
-            )
+        db_risk = DBRouteRisk(
+            id=risk.id,
+            route_id=route.id,
+            rule_id=risk.rule_id,
+            risk_type=risk.feature.feature_type if risk.feature else "unknown",
+            risk_level=risk.level.value,
+            title=risk.title,
+            description=risk.message,
+            score=risk.score,
+            source_name=risk.feature.source if risk.feature else None,
+            source_rank=risk.feature.data_quality.value if risk.feature else None,
+            lat=risk.feature.lat if risk.feature else None,
+            lng=risk.feature.lng if risk.feature else None,
+            confirmation_target=risk.confirmation_target,
+            evidence=risk.evidence,
         )
+        carried = carry.get(_risk_carry_key(risk.rule_id, risk.feature))
+        if carried:
+            db_risk.confirmation_status = carried["status"]
+            if carried["comment"]:
+                db_risk.comments.append(
+                    DBRiskComment(
+                        user_id=carried["user_id"] or "system",
+                        comment=f"[再評価により確認状態を引き継ぎ] {carried['comment']}",
+                        confirmation_result=carried["status"],
+                        created_at=_utcnow(),
+                    )
+                )
+        session.add(db_risk)
     await session.commit()
     # The route object may already be in this session's identity map with a
     # stale ``risks`` collection (old primary keys). Expire everything so the
     # next read from the same session returns the freshly replaced rows.
     session.expire_all()
+
+
+def _confirmation_carry_map(risks: list[DBRouteRisk]) -> dict[tuple, dict]:
+    """Map stable risk keys to their latest confirmation state."""
+
+    carry: dict[tuple, dict] = {}
+    for risk in risks:
+        if risk.confirmation_status in (None, "", "unconfirmed"):
+            continue
+        key = (
+            risk.rule_id or "",
+            risk.risk_type or "",
+            round(risk.lat or 0.0, 6),
+            round(risk.lng or 0.0, 6),
+        )
+        latest_comment = None
+        if risk.comments:
+            latest_comment = sorted(risk.comments, key=lambda c: c.created_at or _utcnow())[-1]
+        carry[key] = {
+            "status": risk.confirmation_status,
+            "comment": latest_comment.comment if latest_comment else "",
+            "user_id": latest_comment.user_id if latest_comment else None,
+        }
+    return carry
+
+
+def _risk_carry_key(rule_id: str, feature) -> tuple:
+    """Build the same stable key used by _confirmation_carry_map."""
+
+    return (
+        rule_id or "",
+        feature.feature_type if feature else "unknown",
+        round(feature.lat if feature else 0.0, 6),
+        round(feature.lng if feature else 0.0, 6),
+    )
 
 
 async def create_audit_log(

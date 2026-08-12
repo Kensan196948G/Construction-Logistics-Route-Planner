@@ -13,9 +13,7 @@
     ],
     "allowed_headers": [
       "Authorization",
-      "Content-Type",
-      "x-user-id",
-      "x-user-role"
+      "Content-Type"
     ]
   },
   "notes": {

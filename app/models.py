@@ -127,6 +127,7 @@ class RouteGenerateRequest(BaseModel):
         max_length=5,
     )
     avoid_points: list[AvoidPoint] = Field(default_factory=list, max_length=20)
+    buffer_m: int = Field(default=300, ge=50, le=1000)
 
     @field_validator("route_types")
     @classmethod
@@ -168,6 +169,7 @@ class RiskItem(BaseModel):
     feature: RouteFeature | None = None
     confirmation_target: str
     evidence: str
+    confirmation_status: Literal["unconfirmed", "confirmed", "needs_review", "not_applicable"] = "unconfirmed"
 
 
 class RouteCandidate(BaseModel):

@@ -19,6 +19,27 @@ In API-key mode, audit identity is derived from deployment configuration
 requires TLS and an access-controlled front (reverse proxy / VPN / Cloudflare
 Access); the application itself does not terminate TLS.
 
+## Fail-Closed Production Mode
+
+`PRODUCTION_MODE=1` turns authentication fail-closed:
+
+- Without `APP_API_KEY` **and** without `ENTRA_TENANT_ID`/`ENTRA_CLIENT_ID`,
+  every protected API returns 503 (`Authentication is not configured`) rather
+  than allowing open access.
+- `ENTRA_TENANT_ID` without `ENTRA_CLIENT_ID` also returns 503 (misconfiguration
+  is surfaced, never silently downgraded).
+- API-key comparison uses `hmac.compare_digest` (timing-safe), and Entra JWKS
+  are cached with a TTL and refreshed on key rotation (kid miss).
+
+## Output Hardening
+
+- CSV exports (reports and audit logs) neutralize spreadsheet formula injection
+  by prefixing `'` to cells starting with `=`, `+`, `-`, `@`, tab, or CR.
+- All responses include security headers (CSP, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`).
+- The public knowledge-search endpoint is rate-limited per client IP
+  (30 requests/minute, HTTP 429).
+
 ## Reporting a Vulnerability
 
 Please report security issues **privately**, not in public issues or PRs:
