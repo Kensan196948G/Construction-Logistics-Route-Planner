@@ -105,6 +105,26 @@
 
 補足: 各製品の費用・ライセンスは公式サイトで要確認。対象システムの独自優位性は「土木建設の安全側初期検討＋確認先提示＋協議資料＋監査 WF」を一貫して持つ点にあり、ルーティング API や GIS 単体では代替できない。
 
+### 6.1 公開データの調査結果（一次情報・品質監視）
+
+| データ | 公式情報 | 更新・欠損・地域差 | 利用条件 | 本システムでの対応状況 |
+|---|---|---|---|---|
+| OpenStreetMap / Overpass | OSMF Tile Usage Policy、Overpass API 利用ポリシー | 更新はコミュニティ依存（日次〜不定期）。属性欠損・地域差が大きく、制限属性（maxweight/maxheight/maxwidth）は未整備区間あり | 公開タイルサーバー・公開 Overpass は低頻度利用のみ。本番は自前ホスト/商用が必要 | Overpass 実地物取得（オプション）、品質ランク C、OSM 属性不足の data_insufficient 判定、キャッシュ上限 256 件、取得失敗時はサンプル明示でフォールバック |
+| 国土数値情報 | 国土交通省（データ整備・利用規約） | 項目により年次〜数年更新。広域基礎情報であり現場近傍の詳細は別確認が必要 | 国交省利用規約に基づく（出典明示等） | アダプタはスタブ（未連携）。サンプル地物は品質ランク E に変更済み |
+| xROAD | 国土交通省 道路データ連携基盤 | 道路台帳・交通量等の提供範囲・更新頻度は API 契約依存（未確認） | API 提供・利用契約は要確認（未契約） | アダプタはスタブ（未連携） |
+| PLATEAU | 国土交通省 Project PLATEAU | 整備済み都市のみ。随時更新 | Project PLATEAU 利用規約 | アダプタはスタブ（未連携） |
+
+品質監視: 更新日・欠損率・重複・表記揺れ・地域差の自動スコアリングは未実装（Phase 2 で「データ品質スコアとリネージュ」として計画）。リネージュは部分実装（各リスク行に source / source_url / acquired_at / data_quality / sample フラグを保持）。取得失敗はログ＋サンプル明示で扱い、実データと誤認させない設計。
+
+競合調査の一次情報（2026-08-12 確認）:
+- 特殊車両通行許可オンライン申請（国交省）: https://www.tokusya.ktr.mlit.go.jp/PR/
+- OSRM: https://github.com/Project-OSRM/osrm-backend
+- Valhalla: https://github.com/valhalla/valhalla
+- openrouteservice 比較資料: https://www.bigiron.cc/guides/openrouteservice-vs-osrm-vs-valhalla-self-hosted-routing
+- ArcGIS Network Analyst ライセンス: https://doc.esri.com/en/arcgis-pro/latest/help/analysis/networks/licensing-and-the-network-analyst-extension.html
+
+※ 各製品の最新費用・ライセンス・更新日は公式サイトで要確認（本評価時点の web 検索結果）。
+
 ## 7. 代替率（加重算定）
 
 重み: 主要業務フロー 35%／必須機能 25%／UX 15%／データ連携 10%／セキュリティ・監査 10%／運用保守性 5%。

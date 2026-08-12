@@ -50,6 +50,27 @@
 | GET /report?format=csv | 200（行・免責・サンプル注意含む） |
 | セキュリティヘッダー | nosniff / DENY / no-referrer / CSP 付与確認 |
 | GET /api/health | db.status=ok、dialect=sqlite |
+
+## 復旧ドリル（実スクリプトによる検証）
+
+`scripts/restore_db.sh` を一時ディレクトリで実行（本番 state.db は非破壊）:
+
+| 手順 | 結果 |
+|---|---|
+| 検証用 state.db 作成（1 行）→ バックアップ（gzip）→ 2 行目を追記 | before restore rows: 2 |
+| `restore_db.sh <backup.gz>` 実行 | `[OK] SQLite restored to ...` |
+| 復旧後の行数・整合性・値 | rows: 1 / integrity: ok / value: original |
+
+## 実 DB（state.db）のマイグレーション適用状況
+
+- `alembic current`: `b2c3d4e5f6a7 (head)`（2 本の新リビジョン適用済み）
+- `PRAGMA integrity_check`: `ok`
+- 適用前に `scripts/backup_db.sh` でバックアップ取得（`state_20260812_194107.db.gz`）
+
+## 検証環境（systemd）の稼働状況
+
+- `construction-logistics-route-planner.service`: active（2026-08-12 19:26 再起動、新コード反映）
+- `http://127.0.0.1:18017/api/health`: status=ok、db.status=ok、sample_mode=true
 | POST /routes/generate（buffer_m=500） | 200（取得半径パラメータの実接続） |
 | POST /routes/{id}/evaluate（include_sources=["osm"]） | 200（指定ソースのみ評価、feature なしリスク 2 件 feature:null） |
 | GET /api/routes/{id}（車両諸元未入力案件） | 200（featureless リスク 500 の回帰確認） |
@@ -63,7 +84,7 @@
 | Neon PostgreSQL 本番マイグレーション | Neon API キー未取得 |
 | Entra ID 実トークン認証 | テナント設定未完了（JWT 検証ロジックは単体で検証） |
 | 負荷・性能テスト（600 名想定） | 未実施 |
-| バックアップ復旧訓練 | 未実施（スクリプト・手順は整備済み） |
+| バックアップ復旧訓練 | 実スクリプトでの復旧ドリルは実施済み（一時ディレクトリ）。本番データでの復旧は本番移行時 |
 
 ## CI 状態
 

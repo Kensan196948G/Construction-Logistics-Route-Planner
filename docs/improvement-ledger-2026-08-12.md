@@ -61,6 +61,6 @@
 | 変更範囲の CI | ローカル品質ゲート全成功（49 pytest / 13 node / ruff / bandit / compile / build） |
 | 主要テスト・ビルド | pytest 49 passed、Node 13 passed、wheel ビルド確認 |
 | データ移行 | Alembic upgrade head 適用（state.db）・downgrade テスト |
-| バックアップ・復旧 | backup_db.sh 実行確認（SQLite・7世代保持）。restore_db.sh は手順確認のみ（本番 state.db を壊さないため未実行） |
-| 検証環境の主要フロー | 入力→生成→評価→Markdown/PDF→提出→RBAC 403 を API スモークで確認 |
+| バックアップ・復旧 | backup_db.sh 実行確認（SQLite・7世代保持）。restore_db.sh を一時ディレクトリで実ドリル（復旧後 rows 1 / integrity ok / value original） |
+| 検証環境の主要フロー | API スモーク（入力→生成→評価→Markdown/PDF→提出→RBAC 403）＋ systemd（18017）が新コードで稼働中（health ok / db.status ok / sample_mode） |
 | 評価書・改善台帳・テスト証跡・運用手順・変更履歴・残課題 | 本ファイルと docs/evaluation-report-2026-08-12.md・docs/test-evidence-2026-08-12.md・docs/CHANGELOG.md に記録 |
