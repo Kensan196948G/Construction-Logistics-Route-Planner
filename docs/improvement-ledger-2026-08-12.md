@@ -24,6 +24,12 @@
 | 16 | ヘッダーの動的表示（案件 ID・名称・状態・日時・利用者） | UX | component.js, index.html | 構文確認 |
 | 17 | README・RELEASE_READINESS の実装との整合、評価書・台帳・証跡・CHANGELOG 追加 | 文書 | docs/*, README.md, RELEASE_READINESS.md | レビュー |
 | 18 | state.json の検証結果・フェーズ更新 | 運用記録 | state.json | 記録 |
+| 19 | サンプル地物の品質ランク E 化と sample フラグ付与（OSM/公的データを装わない） | データ品質 | app/risk_engine.py, app/adapters.py | pytest test_sample_features_are_ranked_estimated |
+| 20 | include_sources による評価入力フィルタ（API 契約の実装） | 機能 | app/risk_engine.py | pytest test_include_sources_filters_evaluation_inputs |
+| 21 | Overpass キャッシュの上限（256 エントリ） | 性能 | app/adapters.py | コードレビュー |
+| 22 | monitor.sh の DB 状態チェック（/api/health db.status） | 監視 | scripts/monitor.sh | 実実行（バックアップ時 smoke） |
+| 23 | 失敗済み stale Dependabot PR（checkout@7.0.1 / setup-python@7.0.0）をクローズ | CI | GitHub | gh pr checks / close |
+| 24 | .opencode/ を Git 管理対象外化、Alembic モジュールの型ヒント近代化 | 保守性 | .gitignore, alembic/* | ruff・compileall |
 
 ## 先行作業の継承（2026-08-12 時点で作業ツリーにあった改善、本評価で検証）
 
@@ -55,6 +61,6 @@
 | 変更範囲の CI | ローカル品質ゲート全成功（49 pytest / 13 node / ruff / bandit / compile / build） |
 | 主要テスト・ビルド | pytest 49 passed、Node 13 passed、wheel ビルド確認 |
 | データ移行 | Alembic upgrade head 適用（state.db）・downgrade テスト |
-| バックアップ・復旧 | backup_db.sh / restore_db.sh 実動作確認（SQLite） |
+| バックアップ・復旧 | backup_db.sh 実行確認（SQLite・7世代保持）。restore_db.sh は手順確認のみ（本番 state.db を壊さないため未実行） |
 | 検証環境の主要フロー | 入力→生成→評価→Markdown/PDF→提出→RBAC 403 を API スモークで確認 |
 | 評価書・改善台帳・テスト証跡・運用手順・変更履歴・残課題 | 本ファイルと docs/evaluation-report-2026-08-12.md・docs/test-evidence-2026-08-12.md・docs/CHANGELOG.md に記録 |

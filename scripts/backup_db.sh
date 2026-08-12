@@ -5,7 +5,8 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="${PROJECT_DIR}/backups/daily"
-DB_FILE="${PROJECT_DIR}/state.db"
+# Optional override for drills/testing (defaults to the repo-local state.db).
+DB_FILE="${DB_FILE:-${PROJECT_DIR}/state.db}"
 RETENTION_DAYS=7
 DATABASE_URL="${DATABASE_URL:-}"
 

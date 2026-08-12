@@ -132,7 +132,7 @@
 | 6〜12 か月 | xROAD/KSJ/PLATEAU 実連携、商用ルーティング/タイル、モバイル PWA＋オフライン、通知、データ品質監視、ユーザー管理 | 計画 |
 | 将来 | AI（RAG・引用・人間承認）、協力会社ポータル、DR、特車申請連携（行政 API 化時） | 計画 |
 
-詳細は [roadmap-2026-08-12.md](roadmap-2026-08-12.md) と [improvement-log-2026-08-12.md](improvement-log-2026-08-12.md) を参照。
+詳細は [roadmap-2026-08-12.md](roadmap-2026-08-12.md) と [improvement-ledger-2026-08-12.md](improvement-ledger-2026-08-12.md) を参照。
 
 ## 9. 追加機能提案（20 件以上）
 

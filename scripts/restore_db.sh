@@ -9,7 +9,8 @@ if [[ $# -lt 1 ]]; then
 fi
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DB_FILE="${PROJECT_DIR}/state.db"
+# Optional override for drills/testing (defaults to the repo-local state.db).
+DB_FILE="${DB_FILE:-${PROJECT_DIR}/state.db}"
 DATABASE_URL="${DATABASE_URL:-}"
 BACKUP_FILE="$1"
 
