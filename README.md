@@ -88,10 +88,17 @@ sequenceDiagram
 | 🧭 ルート生成 | 距離優先、時間優先、幹線道路優先、住宅地回避、橋梁・トンネル確認重視 |
 | ⚠️ 注意抽出 | 橋梁、トンネル、学校、病院、住宅地、交通量、災害リスク、OSM 属性不足 |
 | 📊 評価 | 注意、要確認、データ不足、除外検討、利用候補 |
-| 📄 帳票 | Markdown レポート、CSV レポート |
+| ✅ ワークフロー | 案件提出（submit）→ 承認（approve）／差戻し（request-changes）、リスク確認ステータス記録 |
+| 📄 帳票 | Markdown レポート、CSV レポート、PDF レポート |
 | 🔎 ナレッジ検索 | 搬入計画の論点への安全側ガイダンスと確認先の提示（決定論的・信頼度 E・要レビュー） |
-| 🔐 簡易保護 | 任意の API key による基本アクセス制御 |
+| 🔐 認証 | Entra ID / OIDC（JWT 検証）または API key によるアクセス制御、4 ロール（admin / planner / site_user / viewer）の RBAC |
 | 🖥️ UI | 9 画面のシングルページ UI（ダッシュボード / 案件・条件 / ルート・地図 / 搬入リスクメモ / レポート / ナレッジ / 周辺施設辞書 / 管理 / システム） |
+
+## ⚠️ サンプル表示の明示（本番利用禁止）
+
+現時点のルート候補とリスク地物（橋梁・トンネル・学校・病院・交通量・災害リスク等）は、**実データではなく PoC 用サンプル生成**です。UI 全画面の上部帯、Markdown／CSV 帳票、`/api/health`・ナレッジ応答にその旨を常時表示しています。
+
+本番計画・通行可否・許認可の判断に使用しないでください。`PRODUCTION_MODE=1` を設定してもサンプル生成自体は変わりません（実データ連携が完了してから本番モードを有効にしてください）。
 
 ## 🖥️ 画面構成
 
@@ -99,17 +106,17 @@ UI は Claude Design のハンドオフ（`Route Planner.dc.html`）を実装し
 
 | 画面 | 内容 | バックエンド連携 |
 |---|---|---|
-| 📊 ダッシュボード | 案件一覧、要確認件数、データソース接続状態、注意箇所内訳 | サンプル表示 |
-| 📝 案件・条件入力 | 案件情報、地点・経路、車両・積載、搬入条件、回避条件 | サンプル表示 |
-| 🗺️ ルート検討・地図 | ルート候補比較、**実地図（Leaflet + OSM）**、注意箇所ピン、レイヤ切替、確認ステータス更新 | ✅ 背景地図=実データ（OSM）／ルート・ハザードはサンプル |
+| 📊 ダッシュボード | 案件一覧、要確認件数、データソース接続状態、注意箇所内訳 | ✅ `GET /api/projects` |
+| 📝 案件・条件入力 | 案件情報、地点・経路、車両・積載、搬入条件、回避条件 | ✅ `POST /api/projects` |
+| 🗺️ ルート検討・地図 | ルート候補比較、**実地図（Leaflet + OSM）**、注意箇所ピン、レイヤ切替、確認ステータス更新 | ✅ 背景地図=実データ（OSM）／ルート生成・評価は API 連携 |
 | 🧾 搬入リスクメモ | 確認チェックリスト、確認先、候補サマリ、注意箇所 | サンプル表示 |
-| 📄 レポート出力 | Markdown / CSV / HTML / PDF 相当のプレビュー | サンプル表示 |
+| 📄 レポート出力 | Markdown / CSV / HTML / PDF 相当のプレビュー | ✅ `GET /api/projects/{id}/report` |
 | 🔎 ナレッジ検索 | 論点への安全側ガイダンスと確認先 | ✅ `POST /api/knowledge/search` |
 | 📍 周辺施設辞書 | 橋梁・トンネル・狭隘・学校・病院・踏切等の辞書とフィルタ | サンプル表示 |
 | 🛠️ 管理設定 | データソース、評価重み、評価ルール、ロール、操作ログ | サンプル表示 |
 | ⚙️ システム設定 | 表示・処理・通知・セキュリティの各トグル、API キー | サンプル表示 |
 
-> 起動時に `GET /api/health` で接続性を確認し、ナレッジ検索は実 API を呼び出します。ルート検討画面の背景地図は **Leaflet + OpenStreetMap タイル**の実地図です。その他の画面とルート線・注意箇所の位置はサンプルデータで動作する初期検討プロトタイプであり、外部データ・永続化連携は次フェーズの対象です（[MVP の制約](#-mvp-の制約)）。
+> 起動時に `GET /api/health` で接続性を確認し、案件作成・ルート生成・評価・レポート出力・ナレッジ検索は実 API を呼び出します。API 未接続時はデモデータで動作します。ルート検討画面の背景地図は **Leaflet + OpenStreetMap タイル**の実地図です。
 
 ### 🗺️ 地図（ルート検討画面）
 
@@ -187,11 +194,14 @@ flowchart TD
 ```mermaid
 flowchart TB
     U["🖥️ SPA UI<br/>app/static<br/>dc-runtime.js / component.js"] --> API["🚀 FastAPI<br/>app/main.py"]
+    API --> Auth["🔐 Auth<br/>app/auth.py<br/>OIDC / API Key"]
     API --> Models["📦 Pydantic Models<br/>app/models.py"]
     API --> Engine["🧠 Risk Engine<br/>app/risk_engine.py"]
     API --> Report["📄 Reporting<br/>app/reporting.py"]
     API --> Know["🔎 Knowledge<br/>app/knowledge.py"]
-    Engine --> Store["🧺 In-memory Store<br/>PROJECTS / ROUTES"]
+    API --> Adapters["🔌 Adapters<br/>app/adapters.py<br/>OSM / xROAD / PLATEAU / KSI"]
+    API --> Repo["🗄️ Repository<br/>app/repository.py"]
+    Repo --> DB["💾 SQLAlchemy + SQLite/PostgreSQL<br/>app/db.py / app/db_models.py<br/>14 tables + Alembic migrations"]
     Report --> Out["📤 Markdown / CSV"]
     Know --> Guide["🧭 安全側ガイダンス<br/>確認先・信頼度 E"]
 ```
@@ -231,19 +241,43 @@ uvicorn app.main:app --reload --port 8000
 uvicorn app.main:app --port 8017
 ```
 
-## 🔐 API Key
+## 🔐 認証
 
-社内評価環境などで簡易保護を有効にする場合は `APP_API_KEY` を設定します。
+2 方式の認証をサポートします。
+
+### API キー認証（デフォルト）
 
 ```bash
 APP_API_KEY='change-me' uvicorn app.main:app --port 8000
 ```
 
-設定時は、API 呼び出しに次のヘッダーが必要です。`/api/health` と静的 UI は対象外です。
+設定時は、API 呼び出しに次のヘッダーが必要です。`/api/health`、`/api/knowledge/search`、静的 UI は対象外です。
 
 ```http
 Authorization: Bearer change-me
 ```
+
+### Entra ID / OIDC 認証
+
+以下の環境変数を設定すると、Entra ID JWT 検証が有効になります。
+
+```bash
+ENTRA_TENANT_ID='your-tenant-id'
+ENTRA_CLIENT_ID='your-client-id'
+```
+
+ロール（`admin`, `planner`, `site_user`, `viewer`）は JWT の `roles` クレームから抽出されます。API キー fallback 時は、本人識別をクライアントヘッダーで受け取らず、デプロイ設定（`APP_API_KEY_USER_ID`／`APP_API_KEY_USER_ROLE`、デフォルト `api-key-operator`／`planner`）から決定します。`x-user-id`／`x-user-role` ヘッダーは偽装可能なため監査証跡には使用しません。
+
+PoC モード（`PRODUCTION_MODE` 未設定）では `/api/health` が `sample_mode: true` を返します。
+
+### ロール別権限（最小 RBAC）
+
+| 操作 | viewer | site_user | planner | admin |
+|---|---|---|---|---|
+| 案件・ルート・帳票の閲覧 | ✅ | ✅ | ✅ | ✅ |
+| 案件作成・ルート生成・評価・提出・差戻し | — | — | ✅ | ✅ |
+| リスクの確認ステータス更新 | — | ✅ | ✅ | ✅ |
+| 承認（approve）・監査ログ閲覧 | — | — | — | ✅ |
 
 ## 🔌 API
 
@@ -258,10 +292,30 @@ Authorization: Bearer change-me
 | `GET` | `/api/routes/{route_id}` | ルート詳細 |
 | `POST` | `/api/routes/{route_id}/evaluate` | リスク評価 |
 | `GET` | `/api/routes/{route_id}/risks` | 注意箇所一覧 |
+| `POST` | `/api/routes/{route_id}/risks/{risk_id}/confirm` | リスク確認ステータス更新（confirmed / needs_review / not_applicable） |
+| `POST` | `/api/projects/{project_id}/submit` | 案件を確認依頼（review_required）へ提出 |
+| `POST` | `/api/projects/{project_id}/approve` | 承認（reviewed） |
+| `POST` | `/api/projects/{project_id}/request-changes` | 差戻し（change_requested） |
 | `GET` | `/api/projects/{project_id}/report?format=markdown` | Markdown レポート |
 | `GET` | `/api/projects/{project_id}/report?format=csv` | CSV レポート |
+| `GET` | `/api/projects/{project_id}/report?format=pdf` | PDF レポート |
 | `GET` | `/api/admin/data-sources` | データソース一覧 |
+| `GET` | `/api/admin/audit-logs` | 監査ログ（admin のみ） |
+| `GET` | `/api/me` | 現在の利用者情報 |
 | `POST` | `/api/knowledge/search` | ナレッジ検索（安全側ガイダンス・確認先・信頼度 E） |
+
+## 🗺️ 実ルーティングと実データ連携（Phase 1）
+
+サンプルモードのままでも動作しますが、以下の環境変数で実データへ切り替えられます。
+
+| 環境変数 | 既定値 | 効果 |
+|---|---|---|
+| `ROUTING_PROVIDER=osrm` | `sample` | OSRM（既定は公開デモサーバー。低頻度利用に限る）による実道路ルート生成 |
+| `OSRM_URL` | `https://router.project-osrm.org` | OSRM サーバーURLの差し替え |
+| `OSM_OVERPASS_ENABLED=1` | `0` | Overpass API による実 OSM 地物（橋梁・トンネル・学校・病院）取得 |
+| `OSM_OVERPASS_URL` | `https://overpass-api.de/api/interpreter` | Overpass サーバーURLの差し替え |
+
+実データ使用時は利用規約（OSMF Tile Usage Policy／Overpass API 利用ポリシー）を順守し、本番では自前ホストまたは商用 API を利用してください。
 
 ## 📄 レポート出力
 
@@ -283,9 +337,10 @@ CSV は、案件 ID、ルート ID、距離、時間、リスクレベル、リ�
 ```bash
 ruff check .                        # lint
 python3 -m compileall app tests     # 構文・バイトコード確認
-pytest                              # API + リスク評価 + ナレッジ検索（12 tests）
+pytest                              # API + 認証 + ワークフロー + ルーティング + 帳票 + E2E（32 tests）
 bandit -q -r app                    # コードセキュリティスキャン
 for f in app.js component.js dc-runtime.js; do node --check "app/static/$f"; done  # クライアント構文確認
+node tests/js/route_screen.test.mjs # クライアント動作テスト
 python -m build --wheel && python scripts/check_package_assets.py  # 配布物に静的アセット全同梱を検証
 ```
 
@@ -334,7 +389,7 @@ journalctl --user -u construction-logistics-route-planner.service -f
 
 ### 🐳 Docker 登録
 
-`Dockerfile`（非 root 実行・`HEALTHCHECK` 付き）と `docker-compose.yml`（host `28080` → container `8000`）で配信します。
+`Dockerfile`（非 root 実行・`HEALTHCHECK` 付き）と `docker-compose.yml` で配信します。compose には PostgreSQL／PostGIS（`postgis/postgis:16-3.4`）DB が同梱され、`DATABASE_URL=postgresql+asyncpg://...` で永続化されます。SQLite のまま使う場合は `DATABASE_URL` を設定しないでください。
 
 ```bash
 docker compose build          # イメージ構築
@@ -347,28 +402,35 @@ docker compose down           # 停止・削除
 | 項目 | 値 |
 |---|---|
 | 🏷️ Image | `construction-logistics-route-planner:latest` |
-| 📦 Container | `construction-logistics-route-planner` |
+| 📦 Containers | `webui`（28080→8000）＋ `db`（PostGIS、内部のみ） |
 | 🔗 Port | `0.0.0.0:28080 -> 8000` |
 | 🩺 Health | コンテナ内で `/api/health` を 30 秒間隔監視 |
 | 🔐 API Key | `docker-compose.yml` の `APP_API_KEY` を有効化すると `/api/*`（health・knowledge を除く）を保護 |
+
+初回起動後は Alembic migration を適用してください。
+
+```bash
+docker compose exec webui alembic upgrade head
+```
 
 ## 📌 MVP の制約
 
 | 制約 | 現状 | 次フェーズ候補 |
 |---|---|---|
-| 🛰️ GIS/API | 外部 GIS/API 連携は未接続 | OSM、xROAD、国土数値情報、PLATEAU 等との実連携 |
-| 🗄️ 永続化 | プロセス内メモリ保存 | PostgreSQL / PostGIS |
-| 🔐 認証認可 | 任意 API key の簡易保護 | Entra ID / OIDC / RBAC |
-| 🧾 監査 | 直近イベントのみ保持 | 監査ログ永続化、操作履歴 |
-| 📍 ルート精度 | サンプル geometry | 実道路ネットワーク探索、規制属性反映 |
-| 🧪 評価根拠 | deterministic sample overlay | 実データキャッシュ、データ品質管理、根拠 URL 保持 |
+| 🛰️ GIS/API | 外部 API アダプタ層実装済み（スタブ） | OSM、xROAD、国土数値情報、PLATEAU 等との実連携（API キー待ち） |
+| 🗄️ 永続化 | SQLAlchemy + SQLite（デフォルト）/ PostgreSQL＋PostGIS（compose・migration 済み） | Neon PostgreSQL プロビジョニング（API キー待ち） |
+| 🔐 認証認可 | OIDC/Entra ID + API キー fallback + 4 ロール RBAC 実装済み | Entra ID テナント設定（認証情報待ち） |
+| 🧾 監査 | audit_logs テーブルに永続化済み＋ admin API | 監査ログ検索・エクスポート UI |
+| 📍 ルート精度 | OSRM アダプタ実装済み（`ROUTING_PROVIDER=osrm`） | 商用 Routing API・pgRouting、規制属性反映 |
+| 🧪 評価根拠 | OSM/Overpass 実地物取得対応（`OSM_OVERPASS_ENABLED=1`） | xROAD・国土数値情報・PLATEAU 実連携、品質管理 |
+| ☁️ デプロイ | systemd + Docker + Cloudflare 設定済み | Cloudflare 実デプロイ（API Token 待ち） |
 
 ## 🧭 今後の拡張
 
 ```mermaid
 flowchart LR
-    P1["✅ Phase 1<br/>MVP<br/>UI / API / サンプル評価 / 帳票"]
-    P2["🛰️ Phase 2<br/>Data Integration<br/>OSM / xROAD / 国土数値情報 / PostGIS"]
+    P1["✅ Phase 1<br/>MVP<br/>UI / API / DB永続化 / 認証 / アダプタ層"]
+    P2["🛰️ Phase 2<br/>Data Integration<br/>OSM / xROAD / 国土数値情報 / PostGIS / Cloudflare"]
     P3["🏗️ Phase 3<br/>Construction DX<br/>許認可・協議履歴 / 協力会社ポータル / 実績学習"]
     P4["📈 Phase 4<br/>Management Intelligence<br/>横断ダッシュボード / KPI / 監査レポート"]
     P1 --> P2 --> P3 --> P4

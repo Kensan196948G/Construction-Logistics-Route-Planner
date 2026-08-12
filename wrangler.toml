@@ -1,0 +1,32 @@
+name = "construction-logistics-route-planner"
+main = "cloudflare/worker.js"
+compatibility_date = "2026-07-18"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "mirai-dx-platform.com/api/*", zone_name = "mirai-dx-platform.com" }
+]
+
+[env.production]
+routes = [
+  { pattern = "mirai-dx-platform.com/api/*", zone_name = "mirai-dx-platform.com" }
+]
+
+[env.production.vars]
+BACKEND_ORIGIN = "http://localhost:8000"
+DATABASE_URL = ""
+APP_API_KEY = ""
+ENTRA_TENANT_ID = ""
+ENTRA_CLIENT_ID = ""
+
+[env.staging]
+routes = [
+  { pattern = "staging.mirai-dx-platform.com/api/*", zone_name = "mirai-dx-platform.com" }
+]
+
+[env.staging.vars]
+BACKEND_ORIGIN = "http://localhost:8000"
+DATABASE_URL = ""
+APP_API_KEY = ""
+ENTRA_TENANT_ID = ""
+ENTRA_CLIENT_ID = ""

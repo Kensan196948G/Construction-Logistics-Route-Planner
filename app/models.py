@@ -16,6 +16,12 @@ DISCLAIMER = (
     "追加確認を行ってください。"
 )
 
+SAMPLE_DATA_NOTICE = (
+    "【PoC・サンプル】表示中のルート、橋梁・トンネル・学校・病院・交通量・"
+    "災害リスクなどの地物は実データではなくサンプル生成です。本番計画・"
+    "通行可否・許認可の判断には使用しないでください（本番利用禁止）。"
+)
+
 
 class RiskLevel(StrEnum):
     candidate = "candidate"
@@ -97,7 +103,14 @@ class ProjectCreate(BaseModel):
 
 class Project(ProjectCreate):
     id: str
-    status: Literal["draft", "evaluating", "review_required", "reviewed", "archived"] = "draft"
+    status: Literal[
+        "draft",
+        "evaluating",
+        "review_required",
+        "change_requested",
+        "reviewed",
+        "archived",
+    ] = "draft"
     created_at: datetime
     updated_at: datetime
 
@@ -177,6 +190,8 @@ class RouteGenerateResponse(BaseModel):
     project_id: str
     generated_count: int
     routes: list[RouteCandidate]
+    mode: Literal["sample", "sample+osm", "osrm", "osrm+osm"] = "sample"
+    notes: list[str] = Field(default_factory=list)
 
 
 class EvaluationRequest(BaseModel):
@@ -196,9 +211,26 @@ class EvaluationResponse(BaseModel):
     risks: list[RiskItem]
 
 
+class RiskConfirmRequest(BaseModel):
+    status: Literal["confirmed", "needs_review", "not_applicable"]
+    comment: str = Field(..., min_length=1, max_length=2000)
+
+
+class RiskConfirmResponse(BaseModel):
+    risk_id: str
+    status: str
+    confirmed_by: str
+    comment: str
+    confirmed_at: datetime
+
+
+class WorkflowRequest(BaseModel):
+    comment: str | None = Field(default=None, max_length=2000)
+
+
 class ReportResponse(BaseModel):
     project_id: str
-    format: Literal["markdown", "csv"]
+    format: Literal["markdown", "csv", "pdf"]
     content: str
     generated_at: datetime
 
@@ -227,6 +259,7 @@ class KnowledgeSearchResponse(BaseModel):
     # mirroring the "信頼度 E · 要レビュー" badge in the UI.
     reliability: DataQuality = DataQuality.estimated
     disclaimer: str = DISCLAIMER
+    sample_data_notice: str = SAMPLE_DATA_NOTICE
     generated_at: datetime
 
 

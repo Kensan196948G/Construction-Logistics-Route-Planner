@@ -2,14 +2,39 @@
 # Host 28080 -> container 8000, kept distinct from the systemd service (18017)
 # so both deployments can run on the same host without a port conflict.
 services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: construction-logistics-route-planner-db
+    environment:
+      POSTGRES_USER: planner
+      POSTGRES_PASSWORD: planner
+      POSTGRES_DB: route_planner
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planner -d route_planner"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   webui:
     build: .
     image: construction-logistics-route-planner:latest
     container_name: construction-logistics-route-planner
     ports:
       - "28080:8000"
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       PYTHONUNBUFFERED: "1"
+      # PostGIS-backed persistent storage. Leave unset to use local SQLite.
+      DATABASE_URL: "postgresql+asyncpg://planner:planner@db:5432/route_planner"
+      # ROUTING_PROVIDER: "osrm"        # real OSRM routing (low-volume public server by default)
+      # OSRM_URL: "https://router.project-osrm.org"
+      # OSM_OVERPASS_ENABLED: "1"       # real OSM features via Overpass API
+      # OSM_OVERPASS_URL: "https://overpass-api.de/api/interpreter"
       # APP_API_KEY: "change-me"   # optional bearer-token protection for /api/* (health & knowledge stay open)
     restart: unless-stopped
     healthcheck:
@@ -18,3 +43,6 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+
+volumes:
+  postgis_data:

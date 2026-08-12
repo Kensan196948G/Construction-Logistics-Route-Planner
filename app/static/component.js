@@ -15,7 +15,14 @@ class Component extends DCLogic {
     kQuery: '', kSearching: false, kHasResult: false, kAnswer: '', kError: '',
     facCat: 'all',
     sys: { darkChrome:true, autoEval:true, cacheReuse:true, emailNotify:false, weeklyDigest:true, anonUsage:false },
-    apiKey: '', apiStatus: 'untested', apiSaved: false
+    apiKey: '', apiStatus: 'untested', apiSaved: false,
+    apiOnline: false,
+    apiLoading: false,
+    apiError: '',
+    apiProjects: null,
+    apiRoutes: null,
+    apiReport: null,
+    projectForm: { project_name:'', site_name:'', planner:'', start_name:'', start_lat:'35.681236', start_lng:'139.767125', dest_name:'', dest_lat:'35.658581', dest_lng:'139.745433', height_m:'3.8', gross_weight_t:'32', time_window:'daytime' }
   };
 
   hexToRgba(hex, a){
@@ -32,6 +39,7 @@ class Component extends DCLogic {
       draft:{label:'作成中',bg:'#eef0f2',color:'#6b727c',border:'#d7dbe0'},
       evaluating:{label:'評価中',bg:'#e6effa',color:'#2b6cb0',border:'#c3d8ee'},
       review_required:{label:'追加確認中',bg:'#fce6da',color:'#d9531e',border:'#f3c3a8'},
+      change_requested:{label:'差戻し',bg:'#f3e3f7',color:'#7b5ea7',border:'#d8b8e6'},
       reviewed:{label:'確認済み',bg:'#e4f3e9',color:'#1f8a4c',border:'#bfe3cf'},
       archived:{label:'保管',bg:'#eceae5',color:'#8a8f98',border:'#dcd8d0'}
     };
@@ -68,6 +76,7 @@ class Component extends DCLogic {
   }
 
   get projects(){
+    if(this.state.apiProjects) return this.state.apiProjects;
     return [
       {id:'PRJ-2418', name:'第二期 護岸ブロック据付', site:'△△川 右岸 2.4k付近', status:'review_required', cands:4, confirm:3, data:2, updated:'06/18'},
       {id:'PRJ-2417', name:'橋梁桁 架設 重機回送', site:'国道○○号 △△高架下', status:'evaluating', cands:3, confirm:1, data:1, updated:'06/18'},
@@ -126,6 +135,122 @@ class Component extends DCLogic {
     setTimeout(()=>{ const ok=(this.state.apiKey||'').trim().length>=12; this.setState({ apiStatus: ok?'ok':'fail' }); }, 1100);
   }
   saveApi(){ this.setState({ apiSaved:true }); setTimeout(()=>{ this.setState({ apiSaved:false }); }, 2200); }
+
+  setProjectFormField(k, v){
+    this.setState(s=>({ projectForm: Object.assign({}, s.projectForm, {[k]: v}) }));
+  }
+
+  async fetchProjects(){
+    this.setState({ apiLoading:true, apiError:'' });
+    try {
+      const res = await fetch('/api/projects');
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      const projects = (data||[]).map(p=>({
+        id: p.id, name: p.project_name, site: p.site_name, status: p.status,
+        cands: 0, confirm: 0, data: 0,
+        updated: p.updated_at ? new Date(p.updated_at).toLocaleDateString('ja-JP',{month:'2-digit',day:'2-digit'}) : '—'
+      }));
+      this.setState({ apiProjects:projects, apiOnline:true, apiLoading:false });
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'案件一覧の取得に失敗しました。デモデータを表示します。' });
+    }
+  }
+
+  async createProject(){
+    const f = this.state.projectForm;
+    if(!f.project_name||!f.site_name||!f.planner||!f.start_name||!f.dest_name) return;
+    this.setState({ apiLoading:true, apiError:'' });
+    try {
+      const res = await fetch('/api/projects', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          project_name: f.project_name, site_name: f.site_name, planner: f.planner,
+          start: { name: f.start_name, lat: parseFloat(f.start_lat), lng: parseFloat(f.start_lng) },
+          destination: { name: f.dest_name, lat: parseFloat(f.dest_lat), lng: parseFloat(f.dest_lng) },
+          vehicle: { vehicle_type:'heavy_truck', height_m: parseFloat(f.height_m)||null, gross_weight_t: parseFloat(f.gross_weight_t)||null },
+          delivery: { time_window: f.time_window }
+        })
+      });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      await this.fetchProjects();
+      this.setScreen('dashboard');
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'案件の作成に失敗しました。' });
+    }
+  }
+
+  async generateRoutes(projectId){
+    this.setState({ apiLoading:true, apiError:'', apiRoutes:null });
+    try {
+      const res = await fetch('/api/projects/'+encodeURIComponent(projectId)+'/routes/generate', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      const routes = (data.routes||[]).map((r,i)=>{
+        const letters = ['A','B','C','D','E'];
+        return {
+          id: r.id, letter: letters[i]||'?', name: r.name, typeLabel: r.route_type,
+          distance: String(r.distance_km||0), duration: String(r.duration_min||0),
+          level: r.risk_level||'data_insufficient', score: r.risk_score||0,
+          counts: {confirm:0,caution:0,data:1},
+          arterial: 50, residential: '—', bridges: 0, tunnels: 0,
+          concern: r.summary||'評価待ち',
+          d: this._routeD(i),
+          breakdown: [{label:'評価待ち',v:0,m:100}]
+        };
+      });
+      this.setState({ apiRoutes:routes, apiLoading:false, activeRouteId: routes[0]?routes[0].id:'A' });
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'ルート生成に失敗しました。' });
+    }
+  }
+
+  async evaluateRoute(routeId){
+    this.setState({ apiLoading:true, apiError:'' });
+    try {
+      const res = await fetch('/api/routes/'+encodeURIComponent(routeId)+'/evaluate', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      const routes = (this.state.apiRoutes||[]).map(r=>{
+        if(r.id!==routeId) return r;
+        return Object.assign({}, r, {
+          level: data.risk_level, score: data.risk_score,
+          concern: data.summary||'',
+          counts: {
+            confirm: (data.risk_counts||{}).confirm_required||0,
+            caution: (data.risk_counts||{}).caution||0,
+            data: (data.risk_counts||{}).data_insufficient||0
+          }
+        });
+      });
+      this.setState({ apiRoutes:routes, apiLoading:false });
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'評価に失敗しました。' });
+    }
+  }
+
+  async fetchReport(projectId, format){
+    this.setState({ apiLoading:true, apiError:'', apiReport:null });
+    try {
+      const res = await fetch('/api/projects/'+encodeURIComponent(projectId)+'/report?format='+(format||'markdown'));
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      this.setState({ apiReport:data.content, apiLoading:false });
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'レポート生成に失敗しました。' });
+    }
+  }
+
+  _routeD(i){
+    const paths = [
+      'M110,650 L180,650 L180,500 L360,500 L360,330 L640,330 L640,170 L890,170 L890,140',
+      'M110,650 L150,650 L150,330 L640,330 L640,170 L890,170 L890,140',
+      'M110,650 L110,210 L430,210 L430,95 L890,95 L890,140',
+      'M110,650 L420,650 L420,500 L540,500 L540,330 L660,330 L660,170 L890,170 L890,140'
+    ];
+    return paths[i] || paths[0];
+  }
+
   async runKnowledgeSearch(){
     const q = (this.state.kQuery||'').trim();
     if(!q || this.state.kSearching) return;
@@ -138,8 +263,6 @@ class Component extends DCLogic {
       });
       if(!res.ok) throw new Error('http ' + res.status);
       const data = await res.json();
-      // Drop a stale response: if the user edited the query while this request
-      // was in flight, applying it would desync the shown question and answer.
       if((this.state.kQuery||'').trim() !== q){ this.setState({ kSearching:false }); return; }
       let text = (data.answer || '').trim();
       const targets = Array.isArray(data.confirmation_targets) ? data.confirmation_targets : [];
@@ -197,6 +320,7 @@ class Component extends DCLogic {
   }
 
   get routesData(){
+    if(this.state.apiRoutes) return this.state.apiRoutes;
     return [
       {id:'A',letter:'A',name:'距離優先ルート',typeLabel:'距離優先',distance:'12.4',duration:'34',level:'confirm_required',score:64,counts:{confirm:2,caution:5,data:1},arterial:38,residential:'あり',bridges:1,tunnels:1,
         concern:'橋梁の重量制限とトンネル高さが公開データ上で未確認です。',
@@ -254,10 +378,6 @@ class Component extends DCLogic {
     };
   }
 
-  // ---- Map (Leaflet) -------------------------------------------------------
-  // Affine projection from the schematic SVG space (viewBox 1000x720) onto a
-  // real geographic bounding box, so the sample routes/hazards land on real
-  // streets. +X -> East (+lng), +Y -> South (-lat). Demo area: Tokyo riverside.
   _geo(x, y){
     const WEST=139.72, EAST=139.80, NORTH=35.69, SOUTH=35.63;
     return [ NORTH - (y/720)*(NORTH-SOUTH), WEST + (x/1000)*(EAST-WEST) ];
@@ -280,17 +400,12 @@ class Component extends DCLogic {
       html:'<div style="width:'+size+'px;height:'+size+'px;border-radius:7px 7px 7px 1px;background:'+color+
         ';border:2px solid #fff;'+ring+'color:#fff;font:700 14px \'Noto Sans JP\',sans-serif;display:flex;align-items:center;justify-content:center">'+k+'</div>' });
   }
-  // Called by the runtime after every render. Builds the Leaflet map once on the
-  // persistent (data-keep) node, then syncs routes/hazards to current state.
   afterRender(){
-    if(typeof L==='undefined') return;            // no Leaflet (e.g. jsdom harness)
-    if(this.screenName()!=='routes') return;       // map lives only on the routes screen
+    if(typeof L==='undefined') return;
+    if(this.screenName()!=='routes') return;
     const el = document.getElementById('route-map');
     if(!el) return;
     if(!this._map){
-      // OpenStreetMap basemap (low-volume / internal use; for production use a
-      // dedicated tile provider per the OSM tile usage policy). To use 地理院タイル
-      // instead: 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png' (attr 地理院タイル).
       const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom:19, attribution:'© OpenStreetMap contributors' });
       this._map = L.map(el, { zoomControl:false, attributionControl:false, center:[35.66,139.76], zoom:13, layers:[osm] });
@@ -299,7 +414,7 @@ class Component extends DCLogic {
       this._endpointLayer = L.layerGroup().addTo(this._map);
       this._fitFor = null;
     } else {
-      this._map.invalidateSize();                   // re-attached after a screen switch
+      this._map.invalidateSize();
     }
     this._drawMap();
   }
@@ -308,7 +423,6 @@ class Component extends DCLogic {
     const active = routes.find(r=>r.id===this.state.activeRouteId) || routes[0];
     if(!active) return;
 
-    // Route polylines: inactive dashed grey, active solid blue (drawn last/on top).
     this._routeLayer.clearLayers();
     routes.forEach(r=>{ if(r.id===active.id) return;
       L.polyline(this._pathLatLngs(r.d), { color:'#8d96a1', weight:3, dashArray:'2 8', opacity:0.8 }).addTo(this._routeLayer); });
@@ -316,12 +430,10 @@ class Component extends DCLogic {
     L.polyline(pts, { color:'#ffffff', weight:9 }).addTo(this._routeLayer);
     L.polyline(pts, { color:'#1559b8', weight:5 }).addTo(this._routeLayer);
 
-    // Start / destination markers (shared across routes).
     this._endpointLayer.clearLayers();
     L.marker(this._geo(110,650), { icon:this._endpointIcon('発','#1f8a4c') }).bindPopup('出発地').addTo(this._endpointLayer);
     L.marker(this._geo(890,140), { icon:this._endpointIcon('現','#1a1d21','#ff6a00') }).bindPopup('現場（到着）').addTo(this._endpointLayer);
 
-    // Hazards for the active route, filtered by the visible layers.
     this._hazardLayer.clearLayers();
     const layers = this.state.layers;
     (this.hazardsByRoute[active.id]||[]).filter(h=>layers[this.layerGroup(h.type)]).forEach(h=>{
@@ -333,7 +445,6 @@ class Component extends DCLogic {
       this._hazardLayer.addLayer(marker);
     });
 
-    // Fit to the active route only when it changes (keep view stable on toggles).
     if(this._fitFor!==active.id && pts.length){
       this._map.fitBounds(L.latLngBounds(pts).pad(0.25));
       this._fitFor = active.id;
@@ -473,8 +584,6 @@ class Component extends DCLogic {
       if(h){
         const tm=this.typeMeta(h.type); const lm=lev(h.level); const rm=this.rankMeta(h.rank);
         const cur = this.state.hazardStatus[h.id]||h.status;
-        // Project through the same _geo() the map markers use, so the detail
-        // panel's coordinates match the Leaflet marker position exactly.
         const [hLat, hLng] = this._geo(h.x, h.y);
         const statusOptions = ['unconfirmed','checking','confirmed_ok','confirmed_ng','not_applicable'].map(key=>{
           const sm=this.hzStatusMeta(key); const on=cur===key;
@@ -525,7 +634,7 @@ class Component extends DCLogic {
     const mdText = '# 搬入ルート初期検討メモ\n\n## 1. 案件概要\n- 工事件名: 第二期 護岸ブロック据付工事\n- 現場名: △△川 右岸 2.4k 付近\n- 担当者: 中村 健三（施工計画担当）\n- 作成日: 2026/06/19\n\n## 2. 搬入条件\n- 出発地: ◇◇生コン 第二プラント\n- 到着地: △△川 右岸 2.4k 付近\n- 車両種別: トレーラー\n- 全高: 3.8 m ／ 総重量: 28.0 t\n- 搬入時間帯: 日中 9-17時（夜間不可）\n\n## 3. ルート候補比較\n| 候補 | 距離(km) | 時間(分) | 評価 | 要確認 | 不足 |\n|---|---:|---:|---|---:|---:|\n| A 距離優先 | 12.4 | 34 | 要確認 | 2 | 1 |\n| B 幹線優先 | 15.1 | 38 | 注意 | 1 | 1 |\n| C 住宅地回避 | 17.2 | 46 | 利用候補 | 0 | 2 |\n| D 構造物確認 | 14.0 | 41 | 要確認 | 4 | 1 |\n\n## 4. 主な注意箇所（候補A）\n| No | 種別 | 場所 | 判定 | 出典 |\n|---:|---|---|---|---|\n| 1 | 橋梁 | 〇〇川 △△橋 | 要確認 | OSM (C) |\n| 2 | トンネル | △△トンネル | 要確認 | OSM (C) |\n| 3 | 学校 | ××小学校 | 注意 | 国土数値情報 (B) |\n\n## 5. 追加確認事項\n- 道路管理者へ「△△橋の耐荷重・通行可否」を確認（総重量 28.0t）\n- 「△△トンネルの制限高さ」を確認（全高 3.8m）\n- 狭隘区間（市道□□線）の有効幅員を現地確認\n\n## 6. 注意文\n本資料は公開データに基づく初期検討資料であり、通行可否を保証するものではありません。';
     const csvText = 'route_id,name,distance_km,duration_min,risk_level,confirm_required,data_insufficient\nA,距離優先ルート,12.4,34,confirm_required,2,1\nB,幹線道路優先ルート,15.1,38,caution,1,1\nC,住宅地回避ルート,17.2,46,candidate,0,2\nD,橋梁・トンネル確認重視,14.0,41,confirm_required,4,1';
     const fmt = this.state.reportFormat;
-    const reportCode = fmt==='csv'?csvText:mdText;
+    const reportCode = this.state.apiReport || (fmt==='csv'?csvText:mdText);
     const showCode = fmt==='markdown'||fmt==='csv';
     const reportFileName = fmt==='csv'?'route_comparison_PRJ-2418.csv':(fmt==='html'?'risk_memo_PRJ-2418.html':(fmt==='pdf'?'risk_memo_PRJ-2418.pdf':'risk_memo_PRJ-2418.md'));
 
@@ -534,6 +643,21 @@ class Component extends DCLogic {
     const evalRules = [ {id:'RR-BRIDGE-001', cond:'橋梁あり ＋ 重量制限情報なし', lvl:'要確認', lc:'#d9531e'}, {id:'RR-TUNNEL-001', cond:'トンネル/アンダーパス ＋ 高さ情報なし', lvl:'要確認', lc:'#d9531e'}, {id:'RR-SCHOOL-001', cond:'学校300m以内 ＋ 朝夕搬入', lvl:'注意', lc:'#c47a00'}, {id:'RR-RESIDENTIAL-001', cond:'住宅地通過比率が閾値以上', lvl:'注意', lc:'#c47a00'}, {id:'RR-OSM-QUALITY-001', cond:'OSM属性欠損が多い', lvl:'データ不足', lc:'#5a6573'} ];
     const adminRoles = [ {role:'admin', label:'管理者', perms:'全機能・データソース・評価ルール・ユーザー管理'}, {role:'dx_operator', label:'IT/DX', perms:'接続状況・ログ確認・設定変更'}, {role:'planner', label:'施工計画', perms:'案件作成・評価・レポート出力'}, {role:'site_user', label:'現場', perms:'閲覧・コメント・確認結果登録'}, {role:'viewer', label:'閲覧', perms:'ルート候補とレポートの閲覧'} ];
     const adminLogs = [ {t:'06/19 06:12', u:'system', a:'JOB-001 データソース接続確認', tg:'5 sources'}, {t:'06/18 14:35', u:'中村 健三', a:'確認ステータス更新', tg:'risk A5'}, {t:'06/18 14:20', u:'中村 健三', a:'リスクメモ生成', tg:'PRJ-2418'}, {t:'06/18 09:02', u:'佐藤（DX）', a:'評価ルール変更 RR-BRIDGE-001', tg:'score 20→25'}, {t:'06/17 02:00', u:'system', a:'JOB-002 国土数値情報取込', tg:'対象エリア'} ];
+
+    const pf = this.state.projectForm;
+    const pfFields = {
+      project_name: { value: pf.project_name, onInput: (e)=>this.setProjectFormField('project_name', e.target.value) },
+      site_name: { value: pf.site_name, onInput: (e)=>this.setProjectFormField('site_name', e.target.value) },
+      planner: { value: pf.planner, onInput: (e)=>this.setProjectFormField('planner', e.target.value) },
+      start_name: { value: pf.start_name, onInput: (e)=>this.setProjectFormField('start_name', e.target.value) },
+      start_lat: { value: pf.start_lat, onInput: (e)=>this.setProjectFormField('start_lat', e.target.value) },
+      start_lng: { value: pf.start_lng, onInput: (e)=>this.setProjectFormField('start_lng', e.target.value) },
+      dest_name: { value: pf.dest_name, onInput: (e)=>this.setProjectFormField('dest_name', e.target.value) },
+      dest_lat: { value: pf.dest_lat, onInput: (e)=>this.setProjectFormField('dest_lat', e.target.value) },
+      dest_lng: { value: pf.dest_lng, onInput: (e)=>this.setProjectFormField('dest_lng', e.target.value) },
+      height_m: { value: pf.height_m, onInput: (e)=>this.setProjectFormField('height_m', e.target.value) },
+      gross_weight_t: { value: pf.gross_weight_t, onInput: (e)=>this.setProjectFormField('gross_weight_t', e.target.value) }
+    };
 
     return {
       accent, screen,
@@ -565,7 +689,10 @@ class Component extends DCLogic {
       sysNotify, sysProc, sysDisplay, sysSecurity,
       apiKey: this.state.apiKey, apiStatusLabel: apiMeta.label, apiStatusColor: apiMeta.color, apiStatusDot: apiMeta.dot,
       apiTesting: this.state.apiStatus==='testing', apiSaved: this.state.apiSaved,
-      onApiInput: (e)=>this.setApiKey(e.target.value), testApi: ()=>this.testApi(), saveApi: ()=>this.saveApi()
+      onApiInput: (e)=>this.setApiKey(e.target.value), testApi: ()=>this.testApi(), saveApi: ()=>this.saveApi(),
+      apiLoading: this.state.apiLoading, apiError: this.state.apiError, apiOnline: this.state.apiOnline,
+      pfFields, createProject: ()=>this.createProject(),
+      fetchProjects: ()=>this.fetchProjects()
     };
   }
 }

@@ -1,13 +1,13 @@
 [Unit]
 Description=Construction Logistics Route Planner Web UI
-Documentation=file:/home/kensan/Projects/Construction-Logistics-Route-Planner/README.md
+Documentation=file:%h/Projects/Mirai-DX-Project/Construction-Logistics-Route-Planner/README.md
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/kensan/Projects/Construction-Logistics-Route-Planner
+WorkingDirectory=%h/Projects/Mirai-DX-Project/Construction-Logistics-Route-Planner
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/home/kensan/Projects/Construction-Logistics-Route-Planner
+Environment=PYTHONPATH=%h/Projects/Mirai-DX-Project/Construction-Logistics-Route-Planner
 ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 18017
 Restart=on-failure
 RestartSec=5

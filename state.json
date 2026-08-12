@@ -5,7 +5,7 @@
     "release_deadline": "2026-12-19",
     "phase_mode": "development"
   },
-  "goal": "Claude Design ハンドオフ Route Planner.dc.html を実装し Release Ready を維持する",
+  "goal": "DB永続化・認証・外部APIアダプタ・Cloudflare基盤・WebUI強化・運用文書を実装し、本番デプロイ直前の状態まで完成させる",
   "phase": "Verify",
   "kpi": {
     "success_rate_target": 0.9,
@@ -15,7 +15,7 @@
     "blocker_count": 0
   },
   "execution": {
-    "max_duration_minutes": 180,
+    "max_duration_minutes": 300,
     "repair_count": 0,
     "max_repair": 3,
     "same_error_limit": 2
@@ -27,28 +27,46 @@
   "completed_issues": [
     "Implement Route Planner.dc.html as a 9-screen SPA over the FastAPI backend",
     "Add self-contained dc-runtime.js interpreting the design-component dialect",
-    "Add deterministic safety-first knowledge search endpoint with tests"
+    "Add deterministic safety-first knowledge search endpoint with tests",
+    "Add SQLAlchemy async ORM with 14-table schema + Alembic migrations",
+    "Add OIDC/Entra ID authentication with API key fallback + role-based access control",
+    "Add durable audit logging to audit_logs table",
+    "Add external API adapter layer (OSM, xROAD, PLATEAU, KSI stubs)",
+    "Add Cloudflare deployment configuration (wrangler.toml, worker.js, deploy script)",
+    "Add WebUI live API integration with loading/empty/error states",
+    "Add operations documentation (6 docs: operations, incident-response, rollback, deployment, backup-restore, monitoring)"
   ],
-  "blocked_issues": [],
+  "blocked_issues": [
+    "Cloudflare deployment: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID pending",
+    "Neon PostgreSQL provisioning: Neon API key pending",
+    "Entra ID tenant configuration: ENTRA_TENANT_ID + ENTRA_CLIENT_ID pending",
+    "External API keys: xROAD, PLATEAU, KSI pending"
+  ],
   "learning": {
     "failure_patterns": [
-      "Chromium exits immediately (SIGTRAP) in this environment; use jsdom harness for UI runtime verification instead of Playwright screenshots."
+      "Chromium exits immediately (SIGTRAP) in this environment; use jsdom harness for UI runtime verification instead of Playwright screenshots.",
+      "SQLAlchemy async session with expire_on_commit=False: avoid refresh() after commit; access relationships before returning from session scope.",
+      "SQLite does not support JSONB type; use JSON type for cross-dialect compatibility."
     ],
     "success_patterns": [
       "Extract design template/component/styles programmatically to preserve fidelity instead of hand-copying 1100+ lines.",
-      "Recreate template nodes via createElementNS(node.namespaceURI) so SVG subtrees render; detect events via lowercased on* attribute names."
+      "Recreate template nodes via createElementNS(node.namespaceURI) so SVG subtrees render; detect events via lowercased on* attribute names.",
+      "Use selectinload() for eager-loading relationships in async SQLAlchemy to avoid MissingGreenlet errors.",
+      "Use session.add() for new related objects instead of assigning to relationship lists to avoid lazy-load triggers."
     ]
   },
   "validation": {
-    "pytest": "11 passed",
+    "pytest": "32 passed (Python)",
     "ruff": "passed",
     "compileall": "passed",
-    "bandit": "passed",
-    "pip_audit": "no known vulnerabilities",
-    "jsdom_harness": "9/9 screens render, interactions + focus + SVG namespace verified"
+    "bandit": "passed (0 issues)",
+    "wheel_build": "passed",
+    "asset_check": "passed (all static assets packaged)",
+    "node_syntax": "passed (3 files)",
+    "node_tests": "5 passed"
   },
   "last_session": {
-    "date": "2026-06-19",
-    "summary": "Implemented the Claude Design Route Planner handoff: 9-screen SPA, custom design-component runtime, and a tested knowledge search endpoint."
+    "date": "2026-08-05",
+    "summary": "第1スプリント完了: PostGIS migration+compose、4ロールRBAC、確認・承認・差戻しWF+監査API、OSRM実ルーティング（実測1.5km）、Overpass実地物取得（実測430件）、PDF帳票、API E2E、backup/restore/monitorスクリプトを実装。pytest 32件+Node 5件成功。xROAD/KSJ/PLATEAU実連携・Excel・実ブラウザE2E・UATは次スプリント。"
   }
 }

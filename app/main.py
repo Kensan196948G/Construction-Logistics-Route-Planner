@@ -3,28 +3,52 @@ from __future__ import annotations
 import os
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters import OSMOverpassAdapter
+from app.auth import UserInfo, get_current_user, require_role
+from app.db import get_session
 from app.knowledge import search_knowledge
 from app.models import (
     DISCLAIMER,
+    SAMPLE_DATA_NOTICE,
     EvaluationRequest,
     EvaluationResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    LocationInput,
     Project,
     ProjectCreate,
+    RiskConfirmRequest,
+    RiskConfirmResponse,
     ReportResponse,
     RouteCandidate,
+    RouteFeature,
     RouteGenerateRequest,
     RouteGenerateResponse,
-    new_id,
+    WorkflowRequest,
     now_utc,
 )
-from app.reporting import render_csv, render_markdown
+from app.reporting import render_csv, render_markdown, render_pdf
+from app.repository import (
+    confirm_route_risk,
+    create_audit_log,
+    create_project,
+    get_project,
+    get_project_routes,
+    get_route,
+    list_audit_logs,
+    list_projects,
+    save_report,
+    save_routes,
+    update_project_status,
+    update_route,
+)
 from app.risk_engine import evaluate_route, generate_routes, risk_counts
+from app.routing import fetch_osrm_routes
 
 
 app = FastAPI(
@@ -33,90 +57,125 @@ app = FastAPI(
     description="Initial route risk review API for construction logistics planning.",
 )
 
-PROJECTS: dict[str, Project] = {}
-ROUTES: dict[str, RouteCandidate] = {}
+
+DbSession = Annotated[AsyncSession, Depends(get_session)]
+AuthenticatedUser = Depends(get_current_user)
+PlannerRole = require_role("admin", "planner")
+AdminRole = require_role("admin")
+ConfirmerRole = require_role("admin", "planner", "site_user")
 
 
-def require_api_key(authorization: Annotated[str | None, Header()] = None) -> None:
-    expected = os.getenv("APP_API_KEY")
-    if not expected:
-        return
-    if authorization != f"Bearer {expected}":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Valid Authorization bearer token is required.",
-        )
+def sample_mode_enabled() -> bool:
+    """Whether the deployment is still in PoC/sample mode.
 
+    Route/feature generation is sample-based until real data adapters are wired.
+    ``PRODUCTION_MODE=1`` only removes the "sample" wording from API metadata;
+    it does not make the generated routes real, so it must be set together with
+    the actual data integration work.
+    """
 
-ApiKey = Depends(require_api_key)
+    return os.getenv("PRODUCTION_MODE", "").strip().lower() not in {"1", "true", "yes", "on"}
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
+def health() -> dict[str, object]:
     return {
         "status": "ok",
         "service": "construction-logistics-route-planner",
         "version": "0.1.0",
+        "sample_mode": sample_mode_enabled(),
+        "sample_data_notice": SAMPLE_DATA_NOTICE,
         "disclaimer": DISCLAIMER,
     }
 
 
-@app.get("/api/projects", dependencies=[ApiKey])
-def list_projects() -> list[Project]:
-    return sorted(PROJECTS.values(), key=lambda project: project.created_at, reverse=True)
+@app.get("/api/me")
+def api_me(user: Annotated[UserInfo, Depends(get_current_user)]) -> UserInfo:
+    return user
 
 
-@app.post("/api/projects", status_code=status.HTTP_201_CREATED, dependencies=[ApiKey])
-def create_project(payload: ProjectCreate, request: Request) -> Project:
-    now = now_utc()
-    project = Project(
-        **payload.model_dump(),
-        id=new_id("prj"),
-        created_at=now,
-        updated_at=now,
-    )
-    PROJECTS[project.id] = project
-    _audit("project_created", project.id, request)
+@app.get("/api/projects", dependencies=[AuthenticatedUser])
+async def api_list_projects(session: DbSession) -> list[Project]:
+    return await list_projects(session)
+
+
+@app.post("/api/projects", status_code=status.HTTP_201_CREATED, dependencies=[PlannerRole])
+async def api_create_project(payload: ProjectCreate, request: Request, session: DbSession) -> Project:
+    project = await create_project(session, payload)
+    await _audit(session, "project_created", project.id, request)
     return project
 
 
-@app.get("/api/projects/{project_id}", dependencies=[ApiKey])
-def get_project(project_id: str) -> Project:
-    return _project(project_id)
+@app.get("/api/projects/{project_id}", dependencies=[AuthenticatedUser])
+async def api_get_project(project_id: str, session: DbSession) -> Project:
+    return await _require_project(project_id, session)
 
 
-@app.post("/api/projects/{project_id}/routes/generate", dependencies=[ApiKey])
-def generate_project_routes(project_id: str, payload: RouteGenerateRequest, request: Request) -> RouteGenerateResponse:
-    project = _project(project_id)
-    project.status = "evaluating"
-    project.updated_at = now_utc()
-    routes = generate_routes(project, payload.route_types)
-    for route in routes:
-        ROUTES[route.id] = route
-    _audit("routes_generated", project_id, request, {"count": len(routes)})
-    return RouteGenerateResponse(project_id=project_id, generated_count=len(routes), routes=routes)
+@app.post("/api/projects/{project_id}/routes/generate", dependencies=[PlannerRole])
+async def api_generate_project_routes(
+    project_id: str, payload: RouteGenerateRequest, request: Request, session: DbSession
+) -> RouteGenerateResponse:
+    project = await _require_project(project_id, session)
+    await update_project_status(session, project_id, "evaluating")
+
+    mode = "sample"
+    notes: list[str] = []
+    routes: list[RouteCandidate] | None = None
+    if os.getenv("ROUTING_PROVIDER", "sample").strip().lower() == "osrm":
+        routes = await fetch_osrm_routes(
+            project_id=project.id,
+            start=project.start,
+            destination=project.destination,
+            route_types=payload.route_types,
+        )
+        if routes:
+            mode = "osrm"
+        else:
+            notes.append("OSRM実ルート取得に失敗したため、サンプルルートで代替しました。")
+    if routes is None:
+        routes = generate_routes(project, payload.route_types)
+
+    if os.getenv("OSM_OVERPASS_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}:
+        osm_features = await _fetch_osm_project_features(project.start, project.destination)
+        if osm_features:
+            for route in routes:
+                route.features = osm_features
+            mode = f"{mode}+osm"
+        else:
+            notes.append("OSM地物の取得結果が0件だったため、サンプル地物のままです。")
+
+    await save_routes(session, routes)
+    await _audit(session, "routes_generated", project_id, request, {"count": len(routes)})
+    return RouteGenerateResponse(
+        project_id=project_id,
+        generated_count=len(routes),
+        routes=routes,
+        mode=mode,
+        notes=notes,
+    )
 
 
-@app.get("/api/projects/{project_id}/routes", dependencies=[ApiKey])
-def list_project_routes(project_id: str) -> list[RouteCandidate]:
-    _project(project_id)
-    return [route for route in ROUTES.values() if route.project_id == project_id]
+@app.get("/api/projects/{project_id}/routes", dependencies=[AuthenticatedUser])
+async def api_list_project_routes(project_id: str, session: DbSession) -> list[RouteCandidate]:
+    await _require_project(project_id, session)
+    return await get_project_routes(session, project_id)
 
 
-@app.get("/api/routes/{route_id}", dependencies=[ApiKey])
-def get_route(route_id: str) -> RouteCandidate:
-    return _route(route_id)
+@app.get("/api/routes/{route_id}", dependencies=[AuthenticatedUser])
+async def api_get_route(route_id: str, session: DbSession) -> RouteCandidate:
+    return await _require_route(route_id, session)
 
 
-@app.post("/api/routes/{route_id}/evaluate", dependencies=[ApiKey])
-def evaluate_project_route(route_id: str, payload: EvaluationRequest, request: Request) -> EvaluationResponse:
-    route = _route(route_id)
-    project = _project(route.project_id)
+@app.post("/api/routes/{route_id}/evaluate", dependencies=[PlannerRole])
+async def api_evaluate_project_route(
+    route_id: str, payload: EvaluationRequest, request: Request, session: DbSession
+) -> EvaluationResponse:
+    route = await _require_route(route_id, session)
+    project = await _require_project(route.project_id, session)
     evaluated = evaluate_route(project, route, payload)
-    ROUTES[route_id] = evaluated
-    project.status = "review_required"
-    project.updated_at = now_utc()
-    _audit("route_evaluated", route.project_id, request, {"route_id": route_id})
+    await update_route(session, evaluated)
+    await update_project_status(session, route.project_id, "review_required")
+    await _audit(session, "route_evaluated", route.project_id, request, {"route_id": route_id})
     return EvaluationResponse(
         route_id=route_id,
         risk_score=evaluated.risk_score,
@@ -127,32 +186,144 @@ def evaluate_project_route(route_id: str, payload: EvaluationRequest, request: R
     )
 
 
-@app.get("/api/routes/{route_id}/risks", dependencies=[ApiKey])
-def list_route_risks(route_id: str):
-    return _route(route_id).risks
+@app.post("/api/routes/{route_id}/risks/{risk_id}/confirm", dependencies=[ConfirmerRole])
+async def api_confirm_route_risk(
+    route_id: str,
+    risk_id: str,
+    payload: RiskConfirmRequest,
+    request: Request,
+    session: DbSession,
+    user: Annotated[UserInfo, Depends(get_current_user)],
+) -> RiskConfirmResponse:
+    route = await _require_route(route_id, session)
+    if not any(risk.id == risk_id for risk in route.risks):
+        raise HTTPException(status_code=404, detail="Risk not found in route.")
+    try:
+        confirmed = await confirm_route_risk(
+            session=session,
+            risk_id=risk_id,
+            user_id=user.user_id,
+            status=payload.status,
+            comment=payload.comment,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Risk not found.")
+    await _audit(
+        session,
+        "risk_confirmed",
+        route.project_id,
+        request,
+        {"route_id": route_id, "risk_id": risk_id, "status": payload.status},
+    )
+    return RiskConfirmResponse(**confirmed)
 
 
-@app.get("/api/projects/{project_id}/report", dependencies=[ApiKey])
-def project_report(project_id: str, format: Literal["markdown", "csv"] = "markdown") -> ReportResponse:
-    project = _project(project_id)
-    routes = [route for route in ROUTES.values() if route.project_id == project_id]
+@app.post("/api/projects/{project_id}/submit", dependencies=[PlannerRole])
+async def api_submit_project(
+    project_id: str,
+    payload: WorkflowRequest,
+    request: Request,
+    session: DbSession,
+) -> Project:
+    await _require_project(project_id, session)
+    routes = await get_project_routes(session, project_id)
+    if not any(route.evaluation_status == "evaluated" for route in routes):
+        raise HTTPException(status_code=409, detail="Evaluate at least one route before submitting.")
+    await update_project_status(session, project_id, "review_required")
+    await _audit(session, "project_submitted", project_id, request, {"comment": payload.comment})
+    return await _require_project(project_id, session)
+
+
+@app.post("/api/projects/{project_id}/approve", dependencies=[AdminRole])
+async def api_approve_project(
+    project_id: str,
+    payload: WorkflowRequest,
+    request: Request,
+    session: DbSession,
+) -> Project:
+    project = await _require_project(project_id, session)
+    if project.status not in {"review_required", "change_requested"}:
+        raise HTTPException(status_code=409, detail="Only submitted projects can be approved.")
+    await update_project_status(session, project_id, "reviewed")
+    await _audit(session, "project_approved", project_id, request, {"comment": payload.comment})
+    return await _require_project(project_id, session)
+
+
+@app.post("/api/projects/{project_id}/request-changes", dependencies=[PlannerRole])
+async def api_request_project_changes(
+    project_id: str,
+    payload: WorkflowRequest,
+    request: Request,
+    session: DbSession,
+) -> Project:
+    project = await _require_project(project_id, session)
+    if project.status not in {"review_required", "evaluating"}:
+        raise HTTPException(status_code=409, detail="Only submitted or evaluated projects can be sent back.")
+    await update_project_status(session, project_id, "change_requested")
+    await _audit(session, "project_changes_requested", project_id, request, {"comment": payload.comment})
+    return await _require_project(project_id, session)
+
+
+@app.get("/api/routes/{route_id}/risks", dependencies=[AuthenticatedUser])
+async def api_list_route_risks(route_id: str, session: DbSession):
+    route = await _require_route(route_id, session)
+    return route.risks
+
+
+@app.get("/api/projects/{project_id}/report", dependencies=[AuthenticatedUser])
+async def api_project_report(
+    project_id: str,
+    session: DbSession,
+    format: Literal["markdown", "csv", "pdf"] = "markdown",
+):
+    project = await _require_project(project_id, session)
+    routes = await get_project_routes(session, project_id)
     if not routes:
         raise HTTPException(status_code=409, detail="Generate routes before requesting a report.")
     for route in routes:
         if route.evaluation_status != "evaluated":
             evaluate_route(project, route)
+    if format == "pdf":
+        pdf_bytes = render_pdf(project, routes)
+        await save_report(
+            session,
+            project_id,
+            ReportResponse(project_id=project_id, format="pdf", content="PDF (binary)", generated_at=now_utc()),
+        )
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="route-report-{project_id}.pdf"',
+            },
+        )
     content = render_markdown(project, routes) if format == "markdown" else render_csv(project, routes)
-    return ReportResponse(project_id=project_id, format=format, content=content, generated_at=now_utc())
+    report_response = ReportResponse(project_id=project_id, format=format, content=content, generated_at=now_utc())
+    await save_report(session, project_id, report_response)
+    return report_response
 
 
-@app.get("/api/admin/data-sources", dependencies=[ApiKey])
+@app.get("/api/admin/audit-logs", dependencies=[AdminRole])
+async def api_audit_logs(session: DbSession, limit: int = 100) -> list[dict]:
+    return await list_audit_logs(session, limit=min(max(limit, 1), 500))
+
+
+@app.get("/api/admin/data-sources", dependencies=[AuthenticatedUser])
 def data_sources() -> list[dict[str, str]]:
+    routing = os.getenv("ROUTING_PROVIDER", "sample").strip().lower()
+    osm_enabled = os.getenv("OSM_OVERPASS_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
     return [
         {
+            "id": "routing-osrm",
+            "name": "OSRM real routing",
+            "status": "configured" if routing == "osrm" else "sample",
+            "note": "実道路ネットワークによるルート候補生成（低頻度利用）。",
+        },
+        {
             "id": "sample-osm",
-            "name": "OpenStreetMap sample overlay",
-            "status": "stub",
-            "note": "MVPでは外部APIを呼ばず、属性不足を安全側に評価します。",
+            "name": "OpenStreetMap / Overpass",
+            "status": "configured" if osm_enabled else "stub",
+            "note": "実地物（橋梁・トンネル・学校・病院）取得。",
         },
         {
             "id": "sample-xroad",
@@ -169,8 +340,6 @@ def data_sources() -> list[dict[str, str]]:
     ]
 
 
-# Read-only, stateless, non-sensitive guidance. Like /api/health it is left
-# ungated so the embedded UI (which has no APP_API_KEY) can always reach it.
 @app.post("/api/knowledge/search")
 def knowledge_search(payload: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
     result = search_knowledge(payload.query)
@@ -190,28 +359,54 @@ def index() -> FileResponse:
     return FileResponse("app/static/index.html")
 
 
-def _project(project_id: str) -> Project:
-    project = PROJECTS.get(project_id)
-    if not project:
+async def _require_project(project_id: str, session: AsyncSession) -> Project:
+    project = await get_project(session, project_id)
+    if project is None:
         raise HTTPException(status_code=404, detail="Project not found.")
     return project
 
 
-def _route(route_id: str) -> RouteCandidate:
-    route = ROUTES.get(route_id)
-    if not route:
+async def _require_route(route_id: str, session: AsyncSession) -> RouteCandidate:
+    route = await get_route(session, route_id)
+    if route is None:
         raise HTTPException(status_code=404, detail="Route not found.")
     return route
 
 
-def _audit(action: str, subject_id: str, request: Request, details: dict | None = None) -> None:
-    user = request.headers.get("x-user-id", "anonymous")
-    role = request.headers.get("x-user-role", "planner")
-    request.app.state.last_audit_event = {
-        "action": action,
-        "subject_id": subject_id,
-        "user": user,
-        "role": role,
-        "details": details or {},
-        "created_at": now_utc().isoformat(),
-    }
+async def _fetch_osm_project_features(
+    start: LocationInput, destination: LocationInput
+) -> list[RouteFeature]:
+    """Fetch real OSM features around the origin and destination (max 2 requests)."""
+
+    adapter = OSMOverpassAdapter()
+    merged: list[RouteFeature] = []
+    seen: set[str] = set()
+    for point in (start, destination):
+        for feature in await adapter.fetch_features(point.lat, point.lng, 500):
+            if feature.id not in seen:
+                seen.add(feature.id)
+                merged.append(feature)
+    return merged
+
+
+async def _audit(
+    session: AsyncSession, action: str, subject_id: str, request: Request, details: dict | None = None
+) -> None:
+    if hasattr(request.state, "user"):
+        user_id = request.state.user.user_id
+        user_role = request.state.user.role
+    else:
+        # Never derive identity from client-supplied headers; unauthenticated
+        # operations are recorded as anonymous only.
+        user_id = "anonymous"
+        user_role = "planner"
+    await create_audit_log(
+        session=session,
+        action=action,
+        project_id=subject_id,
+        user_id=user_id,
+        user_role=user_role,
+        details=details,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )

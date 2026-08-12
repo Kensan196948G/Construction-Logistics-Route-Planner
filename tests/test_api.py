@@ -1,17 +1,8 @@
-from fastapi.testclient import TestClient
-
-from app.main import PROJECTS, ROUTES, app
-
-
-client = TestClient(app)
+import pytest
+from httpx import AsyncClient
 
 
-def setup_function() -> None:
-    PROJECTS.clear()
-    ROUTES.clear()
-
-
-def payload() -> dict:
+def _payload() -> dict:
     return {
         "project_name": "中央区仮設材搬入計画",
         "site_name": "中央区施工ヤード",
@@ -28,24 +19,29 @@ def payload() -> dict:
     }
 
 
-def test_health() -> None:
-    response = client.get("/api/health")
+@pytest.mark.asyncio
+async def test_health(client: AsyncClient) -> None:
+    response = await client.get("/api/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["sample_mode"] is True
+    assert "本番利用禁止" in body["sample_data_notice"]
 
 
-def test_create_generate_evaluate_report_flow() -> None:
-    project_response = client.post("/api/projects", json=payload())
+@pytest.mark.asyncio
+async def test_create_generate_evaluate_report_flow(client: AsyncClient) -> None:
+    project_response = await client.post("/api/projects", json=_payload())
     assert project_response.status_code == 201
     project_id = project_response.json()["id"]
 
-    generate_response = client.post(f"/api/projects/{project_id}/routes/generate", json={})
+    generate_response = await client.post(f"/api/projects/{project_id}/routes/generate", json={})
     assert generate_response.status_code == 200
     routes = generate_response.json()["routes"]
     assert len(routes) >= 3
 
     for route in routes:
-        evaluation_response = client.post(f"/api/routes/{route['id']}/evaluate", json={})
+        evaluation_response = await client.post(f"/api/routes/{route['id']}/evaluate", json={})
         assert evaluation_response.status_code == 200
         body = evaluation_response.json()
         assert body["risk_score"] > 0
@@ -56,16 +52,19 @@ def test_create_generate_evaluate_report_flow() -> None:
             "data_insufficient",
         }
 
-    report_response = client.get(f"/api/projects/{project_id}/report?format=markdown")
+    report_response = await client.get(f"/api/projects/{project_id}/report?format=markdown")
     assert report_response.status_code == 200
     content = report_response.json()["content"]
     assert "搬入ルート初期検討メモ" in content
+    assert "本番利用禁止（PoC・サンプル）" in content
+    assert "サンプル生成" in content
     assert "保証するものではありません" in content
     assert "追加確認事項" in content
 
 
-def test_validation_rejects_invalid_coordinates() -> None:
-    bad_payload = payload()
+@pytest.mark.asyncio
+async def test_validation_rejects_invalid_coordinates(client: AsyncClient) -> None:
+    bad_payload = _payload()
     bad_payload["start"]["lat"] = 120
-    response = client.post("/api/projects", json=bad_payload)
+    response = await client.post("/api/projects", json=bad_payload)
     assert response.status_code == 422

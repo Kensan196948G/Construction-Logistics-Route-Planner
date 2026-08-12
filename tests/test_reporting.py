@@ -125,6 +125,7 @@ def test_render_csv_header_and_one_row_per_risk() -> None:
     header = rows[0]
     assert header[:4] == ["project_id", "project_name", "route_id", "route_name"]
     assert "risk_title" in header and "confirmation_target" in header
+    assert "sample_notice" in header
 
     body = rows[1:]
     # One row for the single risk on route A, plus one blank-risk row for route B.
@@ -135,11 +136,13 @@ def test_render_csv_header_and_one_row_per_risk() -> None:
     assert risk_row[header.index("risk_title")] == "橋梁の重量制限"
     assert risk_row[header.index("confirmation_target")] == "道路管理者への耐荷重照会"
     assert risk_row[header.index("project_id")] == "prj_test"
+    assert "本番利用禁止" in risk_row[header.index("sample_notice")]
 
     # Route B has no risks: the row exists but risk columns are blank.
     blank_row = by_route["route_b"]
     assert blank_row[header.index("risk_title")] == ""
     assert blank_row[header.index("risk_message")] == ""
+    assert "本番利用禁止" in blank_row[header.index("sample_notice")]
 
 
 def test_render_csv_is_parseable_and_quotes_commas() -> None:

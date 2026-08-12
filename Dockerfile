@@ -12,7 +12,7 @@ WORKDIR /app
 # relative path "app/static" (resolved against WORKDIR at runtime).
 COPY pyproject.toml ./
 COPY app ./app
-RUN pip install .
+RUN pip install '.[pg]'
 
 # Drop privileges: uvicorn binds 8000 (>1024), so root is unnecessary.
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app

@@ -11,3 +11,11 @@ artifacts/
 .env
 .env.*
 !.env.example
+
+# Runtime data (local SQLite + backup artifacts)
+state.db
+state.db.*
+backups/
+
+# Local tool state
+.opencode/
