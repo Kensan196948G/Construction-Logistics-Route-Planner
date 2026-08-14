@@ -42,6 +42,27 @@ def test_anonymous_mode_does_not_trust_headers(monkeypatch) -> None:
     assert user.role == "planner"
 
 
+def test_poc_anonymous_role_is_configurable_for_demo(monkeypatch) -> None:
+    monkeypatch.delenv("APP_API_KEY", raising=False)
+    monkeypatch.setenv("POC_ANONYMOUS_ROLE", "admin")
+    request = _request({})
+
+    user = _api_key_auth(request, None)
+
+    assert user.user_id == "anonymous"
+    assert user.role == "admin"
+
+
+def test_poc_anonymous_role_ignores_invalid_values(monkeypatch) -> None:
+    monkeypatch.delenv("APP_API_KEY", raising=False)
+    monkeypatch.setenv("POC_ANONYMOUS_ROLE", "superuser")
+    request = _request({})
+
+    user = _api_key_auth(request, None)
+
+    assert user.role == "planner"
+
+
 def test_api_key_mode_uses_configured_identity(monkeypatch) -> None:
     monkeypatch.setenv("APP_API_KEY", "secret-key-123456")
     monkeypatch.setenv("APP_API_KEY_USER_ID", "kensan")

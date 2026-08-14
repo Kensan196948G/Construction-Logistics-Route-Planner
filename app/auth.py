@@ -41,6 +41,18 @@ def _auth_configured() -> bool:
     return bool(os.getenv("APP_API_KEY")) or _is_oidc_enabled()
 
 
+def _poc_anonymous_role() -> str:
+    """Role for the open PoC identity (no auth configured, not production).
+
+    The default stays ``planner``. A local demo deployment can opt into
+    ``admin`` so every workflow (approve, audit-log view/export) is exercisable
+    without a key. Production mode is fail-closed and never uses this path.
+    """
+
+    role = os.getenv("POC_ANONYMOUS_ROLE", "planner").strip()
+    return role if role in ROLES else "planner"
+
+
 def _is_oidc_enabled() -> bool:
     return bool(os.getenv("ENTRA_TENANT_ID"))
 
@@ -206,7 +218,7 @@ def _api_key_auth(request: Request, authorization: str | None) -> UserInfo:
         # fixed non-spoofable identity. This is intentional and documented;
         # PRODUCTION_MODE=1 switches it to fail-closed.
         user_id = "anonymous"
-        role = "planner"
+        role = _poc_anonymous_role()
     if role not in ROLES:
         role = "planner"
 

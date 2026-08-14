@@ -35,10 +35,20 @@ Access); the application itself does not terminate TLS.
 
 - CSV exports (reports and audit logs) neutralize spreadsheet formula injection
   by prefixing `'` to cells starting with `=`, `+`, `-`, `@`, tab, or CR.
+- Excel (xlsx) reports apply the same neutralization to every string cell.
 - All responses include security headers (CSP, `X-Content-Type-Options`,
   `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`).
 - The public knowledge-search endpoint is rate-limited per client IP
   (30 requests/minute, HTTP 429).
+
+## PoC identity and the demo-role knob
+
+Without `APP_API_KEY` and outside production mode, protected endpoints accept a
+fixed `anonymous` identity (default role `planner`). A local demo deployment may
+set `POC_ANONYMOUS_ROLE=admin` so approval and audit-log flows are exercisable
+without a key. This path is PoC-only: `PRODUCTION_MODE=1` is fail-closed and
+never uses it. Do not expose a PoC instance with an admin role beyond the
+intended reviewer audience.
 
 ## Reporting a Vulnerability
 

@@ -23,6 +23,12 @@
     if (typeof component.fetchProjects === 'function') {
       component.fetchProjects();
     }
+    if (typeof component.fetchMe === 'function') {
+      component.fetchMe();
+    }
+    if (typeof component.fetchProjectStats === 'function') {
+      component.fetchProjectStats();
+    }
     // Admin views (data sources + audit log) load lazily too; they fall back to
     // demo rows when the API is unreachable or the caller is not an admin.
     if (typeof component.fetchDataSources === 'function') {
@@ -30,6 +36,9 @@
     }
     if (typeof component.fetchAuditLogs === 'function') {
       component.fetchAuditLogs();
+    }
+    if (typeof component.fetchFacilities === 'function') {
+      component.fetchFacilities();
     }
 
     // Confirm backend reachability; record it for diagnostics without altering

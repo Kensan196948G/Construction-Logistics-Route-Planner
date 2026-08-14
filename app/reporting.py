@@ -309,5 +309,143 @@ def render_pdf(project: Project, routes: list[RouteCandidate]) -> bytes:
     return buffer.getvalue()
 
 
+def render_xlsx(project: Project, routes: list[RouteCandidate]) -> bytes:
+    """Render the initial-review memo as an Excel workbook (openpyxl).
+
+    String cells are passed through ``_csv_safe`` so values that look like
+    spreadsheet formulas cannot execute when the file is opened in Excel.
+    """
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    workbook = Workbook()
+    header_fill = PatternFill("solid", fgColor="EEF0F2")
+    header_font = Font(bold=True)
+    wrap = Alignment(wrap_text=True, vertical="top")
+
+    overview = workbook.active
+    overview.title = "概要・搬入条件"
+    overview.append(["搬入ルート初期検討メモ（Excel 帳票）"])
+    overview["A1"].font = Font(bold=True, size=13)
+    overview.append(["案件ID", project.id])
+    overview.append(["工事件名", _csv_safe(project.project_name)])
+    overview.append(["現場名", _csv_safe(project.site_name)])
+    overview.append(["担当者", _csv_safe(project.planner)])
+    overview.append(["発注者区分", _csv_safe(project.owner_type or "未入力")])
+    overview.append(
+        [
+            "出発地",
+            f"{project.start.name} ({project.start.lat:.6f}, {project.start.lng:.6f})",
+        ]
+    )
+    overview.append(
+        [
+            "到着地",
+            f"{project.destination.name} ({project.destination.lat:.6f}, {project.destination.lng:.6f})",
+        ]
+    )
+    overview.append(["車両種別", _csv_safe(project.vehicle.vehicle_type)])
+    overview.append(
+        [
+            "全長/全幅/全高",
+            (
+                f"{_value(project.vehicle.length_m, 'm')} / "
+                f"{_value(project.vehicle.width_m, 'm')} / {_value(project.vehicle.height_m, 'm')}"
+            ),
+        ]
+    )
+    overview.append(
+        [
+            "総重量/軸重",
+            (
+                f"{_value(project.vehicle.gross_weight_t, 't')} / "
+                f"{_value(project.vehicle.axle_weight_t, 't')}"
+            ),
+        ]
+    )
+    overview.append(["積載物", _csv_safe(project.vehicle.cargo_type or "未入力")])
+    overview.append(
+        ["特車該当可能性", "あり" if project.vehicle.special_vehicle_flag else "未指定"]
+    )
+    overview.append(["搬入日", str(project.delivery.delivery_date or "未指定")])
+    overview.append(["時間帯", _csv_safe(project.delivery.time_window)])
+    overview.append(["回避条件", _csv_safe(", ".join(project.avoid_conditions or []) or "なし")])
+    overview.append(["備考", _csv_safe(project.notes or "")])
+    for row in overview.iter_rows(min_row=1, max_row=overview.max_row):
+        row[0].font = header_font
+    overview.column_dimensions["A"].width = 20
+    overview.column_dimensions["B"].width = 90
+
+    comparison = workbook.create_sheet("ルート候補比較")
+    comparison.append(
+        ["候補", "距離(km)", "時間(分)", "評価", "スコア", "注意", "要確認", "データ不足", "コメント"]
+    )
+    for route in routes:
+        counts = risk_counts(route.risks)
+        comparison.append(
+            [
+                _csv_safe(route.name),
+                route.distance_km,
+                route.duration_min,
+                LEVEL_LABELS[route.risk_level],
+                route.risk_score,
+                counts[RiskLevel.caution.value],
+                counts[RiskLevel.confirm_required.value],
+                counts[RiskLevel.data_insufficient.value],
+                _csv_safe(route.summary),
+            ]
+        )
+    for cell in comparison[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+    comparison.freeze_panes = "A2"
+    for column, width in zip("ABCDEFGHI", (32, 10, 10, 12, 9, 8, 9, 11, 70), strict=True):
+        comparison.column_dimensions[column].width = width
+
+    risks_sheet = workbook.create_sheet("注意箇所")
+    risks_sheet.append(
+        ["候補", "レベル", "種別", "名称", "内容", "確認先", "根拠", "緯度", "経度"]
+    )
+    for route in routes:
+        for risk in route.risks:
+            risks_sheet.append(
+                [
+                    _csv_safe(route.name),
+                    LEVEL_LABELS[risk.level],
+                    risk.feature.feature_type if risk.feature else "車両条件",
+                    _csv_safe(risk.title),
+                    _csv_safe(risk.message),
+                    _csv_safe(risk.confirmation_target),
+                    _csv_safe(risk.evidence),
+                    round(risk.feature.lat, 6) if risk.feature else "",
+                    round(risk.feature.lng, 6) if risk.feature else "",
+                ]
+            )
+    for cell in risks_sheet[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+    risks_sheet.freeze_panes = "A2"
+    for column, width in zip("ABCDEFGHI", (28, 12, 12, 24, 58, 28, 42, 12, 12), strict=True):
+        risks_sheet.column_dimensions[column].width = width
+    for row in risks_sheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = wrap
+
+    notice = workbook.create_sheet("免責・注意文")
+    notice.append(["本番利用禁止（PoC・サンプル）"])
+    notice.append([SAMPLE_DATA_NOTICE])
+    notice.append([])
+    notice.append([DISCLAIMER])
+    for row in notice.iter_rows():
+        for cell in row:
+            cell.alignment = wrap
+    notice.column_dimensions["A"].width = 110
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
 def _value(value: float | None, unit: str) -> str:
     return f"{value:g} {unit}" if value is not None else "未入力"

@@ -65,7 +65,8 @@ async def test_full_workflow_confirm_submit_approve_and_audit(client: AsyncClien
 
     logs = await client.get("/api/admin/audit-logs", headers=headers)
     assert logs.status_code == 200
-    actions = [log["action"] for log in logs.json()]
+    body = logs.json()
+    actions = [log["action"] for log in body["items"]]
     assert "project_approved" in actions
     assert "risk_confirmed" in actions
     assert "project_submitted" in actions

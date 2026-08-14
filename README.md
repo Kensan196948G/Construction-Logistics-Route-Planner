@@ -89,7 +89,8 @@ sequenceDiagram
 | ⚠️ 注意抽出 | 橋梁、トンネル、学校、病院、住宅地、交通量、災害リスク、OSM 属性不足 |
 | 📊 評価 | 注意、要確認、データ不足、除外検討、利用候補 |
 | ✅ ワークフロー | 案件提出（submit）→ 承認（approve）／差戻し（request-changes）、リスク確認ステータス記録 |
-| 📄 帳票 | Markdown レポート、CSV レポート、PDF レポート |
+| 📝 案件管理 | 案件一覧の検索・ステータスフィルタ・ページング、編集（PATCH）、論理削除（DELETE → 保管） |
+| 📄 帳票 | Markdown レポート、CSV レポート、Excel（xlsx）帳票、PDF レポート |
 | 🔎 ナレッジ検索 | 搬入計画の論点への安全側ガイダンスと確認先の提示（決定論的・信頼度 E・要レビュー） |
 | 🔐 認証 | Entra ID / OIDC（JWT 検証）または API key によるアクセス制御、4 ロール（admin / planner / site_user / viewer）の RBAC。`PRODUCTION_MODE=1` では認証未設定時に全保護 API を 503 で拒否（フェイルクローズ） |
 | 🧾 監査 | 全操作の `audit_logs` 永続化＋admin 向け CSV エクスポート |
@@ -107,13 +108,13 @@ UI は Claude Design のハンドオフ（`Route Planner.dc.html`）を実装し
 
 | 画面 | 内容 | バックエンド連携 |
 |---|---|---|
-| 📊 ダッシュボード | 案件一覧、要確認件数、データソース接続状態、注意箇所内訳 | ✅ `GET /api/projects` |
+| 📊 ダッシュボード | 案件一覧（検索・ステータスフィルタ・ページング・編集・保管）、KPI、データソース接続状態、注意箇所内訳 | ✅ `GET /api/projects` `/api/projects/stats` |
 | 📝 案件・条件入力 | 案件情報、地点・経路、車両・積載、搬入条件、回避条件 | ✅ `POST /api/projects` |
 | 🗺️ ルート検討・地図 | ルート候補比較、**実地図（Leaflet + OSM）**、注意箇所ピン、レイヤ切替、確認ステータス更新 | ✅ 背景地図=実データ（OSM）／ルート生成・評価・確認登録は API 連携 |
 | 🧾 搬入リスクメモ | 確認チェックリスト、確認先、候補サマリ、注意箇所 | 表示サンプル（実データはレポート出力画面） |
-| 📄 レポート出力 | Markdown / CSV / PDF のプレビューとダウンロード | ✅ `GET /api/projects/{id}/report` |
+| 📄 レポート出力 | Markdown / CSV / Excel / PDF のプレビューとダウンロード | ✅ `GET /api/projects/{id}/report` |
 | 🔎 ナレッジ検索 | 論点への安全側ガイダンスと確認先（決定論的ルール・AI不使用・信頼度 E） | ✅ `POST /api/knowledge/search` |
-| 📍 周辺施設辞書 | 橋梁・トンネル・狭隘・学校・病院・踏切等の辞書とフィルタ | サンプル表示 |
+| 📍 周辺施設辞書 | 橋梁・トンネル・狭隘・学校・病院・踏切等の辞書とフィルタ | ✅ `GET /api/facilities`（DB 連携・読取り専用） |
 | 🛠️ 管理設定 | データソース、評価重み、評価ルール、ロール、操作ログ | データソース・監査ログは実 API 連携／評価ルール等はサンプル表示 |
 | ⚙️ システム設定 | 表示・処理・通知・セキュリティの各トグル、API キー | API キーは sessionStorage 保存＋接続テスト／他はサンプル表示 |
 
@@ -242,6 +243,27 @@ uvicorn app.main:app --reload --port 8000
 uvicorn app.main:app --port 8017
 ```
 
+### 3. デモ用ダミーデータの投入（任意）
+
+評価・デモ用の架空データを再生成可能な形で投入できます（冪等。`seed-` プレフィックスの行だけを毎回入れ替えます）。
+
+```bash
+alembic upgrade head
+python scripts/seed_demo.py
+```
+
+| 種別 | 内容 |
+|---|---|
+| ユーザー | `seed-admin`（管理者）/ `seed-planner`（施工計画）/ `seed-site`（現場）/ `seed-viewer`（閲覧）。メールはすべて架空（`@example.jp`） |
+| 案件 | 8 件（draft / evaluating / review_required / change_requested / reviewed / archived を網羅）。現場名・住所・座標はすべて架空 |
+| ルート | 32 候補（最新世代）＋ 140 リスク（確認ステータス・コメント付き） |
+| 帳票 | Markdown / CSV を案件ごとに保存。Excel / PDF は画面から生成 |
+| データソース | 5 件（OSM / xROAD / 国土数値情報 / PLATEAU / 交通量サンプル） |
+| 施設辞書 | 8 件（橋梁・トンネル・狭隘・学校・病院・踏切・災害・交通量。架空） |
+| 監査ログ | 案件作成等の操作履歴 |
+
+人物名・会社名・住所・座標は実在情報を避けた架空値です。本番データ・個人情報は含まれません。再投入は `python scripts/seed_demo.py` を再実行するだけです。
+
 ## 🔐 認証
 
 2 方式の認証をサポートします。
@@ -271,6 +293,8 @@ ENTRA_CLIENT_ID='your-client-id'
 
 PoC モード（`PRODUCTION_MODE` 未設定）では `/api/health` が `sample_mode: true` を返します。
 
+ローカル評価用に、未認証 PoC ユーザーのロールを `POC_ANONYMOUS_ROLE` で切替できます（既定 `planner`。`admin` にすると承認・監査ログ閲覧までキーなしで操作できます）。これは PoC 限定の設定で、`PRODUCTION_MODE=1` では常にフェイルクローズとなり無効です。
+
 ### 本番モードのフェイルクローズ
 
 `PRODUCTION_MODE=1` を設定し、かつ `APP_API_KEY` と Entra ID（`ENTRA_TENANT_ID`／`ENTRA_CLIENT_ID`）のどちらも未設定の場合、保護対象 API は **503（Authentication is not configured）** を返して拒否します。PoC モードの「API キー未設定なら誰でも planner」は本番では成立しません。
@@ -294,6 +318,9 @@ Entra ID を有効にする場合、`ENTRA_TENANT_ID` のみ設定して `ENTRA_
 | `GET` | `/api/projects` | 案件一覧 |
 | `POST` | `/api/projects` | 案件作成 |
 | `GET` | `/api/projects/{project_id}` | 案件詳細 |
+| `PATCH` | `/api/projects/{project_id}` | 案件編集（draft / evaluating / change_requested のみ。planner 以上） |
+| `DELETE` | `/api/projects/{project_id}` | 案件の論理削除（`archived` へ変更。履歴・ルート・監査ログは保持） |
+| `GET` | `/api/projects/stats` | ステータス別の案件数（ダッシュボード KPI 用） |
 | `POST` | `/api/projects/{project_id}/routes/generate` | ルート候補生成 |
 | `GET` | `/api/projects/{project_id}/routes` | 案件内ルート一覧 |
 | `GET` | `/api/routes/{route_id}` | ルート詳細 |
@@ -305,12 +332,16 @@ Entra ID を有効にする場合、`ENTRA_TENANT_ID` のみ設定して `ENTRA_
 | `POST` | `/api/projects/{project_id}/request-changes` | 差戻し（change_requested） |
 | `GET` | `/api/projects/{project_id}/report?format=markdown` | Markdown レポート |
 | `GET` | `/api/projects/{project_id}/report?format=csv` | CSV レポート |
+| `GET` | `/api/projects/{project_id}/report?format=xlsx` | Excel 帳票（概要・比較・注意箇所・免責の4シート） |
 | `GET` | `/api/projects/{project_id}/report?format=pdf` | PDF レポート |
 | `GET` | `/api/admin/data-sources` | データソース一覧 |
-| `GET` | `/api/admin/audit-logs` | 監査ログ（admin のみ） |
+| `GET` | `/api/admin/audit-logs` | 監査ログ（admin のみ。`q` / `action` / `user_id` / `limit` / `offset` で絞り込み） |
 | `GET` | `/api/admin/audit-logs/export` | 監査ログ CSV エクスポート（admin のみ） |
+| `GET` | `/api/facilities` | 周辺施設辞書（`knowledge_points` テーブル。読取り専用） |
 | `GET` | `/api/me` | 現在の利用者情報 |
 | `POST` | `/api/knowledge/search` | ナレッジ検索（安全側ガイダンス・確認先・信頼度 E） |
+
+`GET /api/projects` は `{items, total, limit, offset}` 形式です。`q`（案件名・現場名・担当者の部分一致）、`status`（単一ステータス）、`limit`（1〜200）、`offset` で検索・ページングできます。各案件の `risk_summary` には最新世代の `candidates` / `confirm_required` / `data_insufficient` 件数が入ります。
 
 運用上の防御（追加）:
 
@@ -319,6 +350,8 @@ Entra ID を有効にする場合、`ENTRA_TENANT_ID` のみ設定して `ENTRA_
 - CSV エクスポート（レポート・監査ログ）は `=`, `+`, `-`, `@` 始まりのセルを `'` 前置で中和（数式インジェクション対策）
 - ルート再生成は世代管理（`generation` 列）を行い、一覧・帳票は最新世代のみ表示。旧世代は履歴として保持し、再評価時は確認ステータスを引き継ぎ
 - 搬入条件（日時・時間帯・休日・夜間可否）と回避条件は DB に永続化され、案件作成ユーザーも `owner_user_id` として記録
+- 案件の編集（PATCH）と論理削除（DELETE → `archived`）。承認済み・保管済みの編集は 409 で拒否し、削除は履歴・ルート・監査ログを破棄しない
+- Excel 帳票は openpyxl で生成し、`=`,`+`,`-`,`@` 始まりのセルは `'` 前置で中和（数式インジェクション対策）
 
 ## 🗺️ 実ルーティングと実データ連携（Phase 1）
 
@@ -353,10 +386,10 @@ CSV は、案件 ID、ルート ID、距離、時間、リスクレベル、リ�
 ```bash
 ruff check .                        # lint
 python3 -m compileall app tests     # 構文・バイトコード確認
-pytest                              # API + 認証 + ワークフロー + 永続化 + ルーティング + 帳票 + E2E（49 tests）
+pytest                              # API + 認証 + ワークフロー + 永続化 + ルーティング + 帳票 + CRUD + E2E（59 tests）
 bandit -q -r app                    # コードセキュリティスキャン
 for f in app.js component.js dc-runtime.js; do node --check "app/static/$f"; done  # クライアント構文確認
-node tests/js/route_screen.test.mjs # クライアント動作テスト（13 tests）
+node tests/js/route_screen.test.mjs # クライアント動作テスト（18 tests）
 python -m build --wheel && python scripts/check_package_assets.py  # 配布物に静的アセット全同梱を検証
 ```
 
@@ -364,6 +397,7 @@ python -m build --wheel && python scripts/check_package_assets.py  # 配布物�
 |---|---|---|
 | `quality` | ruff / compileall / pytest / bandit / node --check | ✅ 必須（失敗で merge 不可） |
 | `package` | wheel ビルド + 静的アセット同梱検証（`scripts/check_package_assets.py`） | ✅ 必須 |
+| `e2e` | 使い捨て SQLite + seed で uvicorn を起動し、Playwright（Firefox headless）でダッシュボード→検索→ルート生成→ナレッジ→施設辞書→監査 CSV→編集→論理削除を実ブラウザ確認 | ✅ 必須 |
 | `dependency-audit` | `pip-audit .`（プロジェクト依存のみ）＋ JSON レポートを artifact 保存 | ⚠️ advisory（推移的依存の CVE churn で無関係 PR を止めないため非ブロッキング） |
 
 > **`package` ジョブの意義**: editable install（`pip install -e`）はソースツリーから直接 import するため、`pip install .`（Docker デプロイ経路）で wheel に同梱され損ねる `package-data` の取りこぼしを検出できません。非 editable な wheel を実ビルドして vendored Leaflet を含む全アセットの存在を検証します。
@@ -372,7 +406,16 @@ python -m build --wheel && python scripts/check_package_assets.py  # 配布物�
 
 依存の脆弱性是正方針・報告窓口・Dependabot 設定は [`SECURITY.md`](SECURITY.md) を参照してください。
 
-UI ランタイム（`dc-runtime.js`）は、9 画面の描画・`sc-if` / `sc-for` 展開・イベント配線・SVG 名前空間・入力フォーカス保持を jsdom ベースのハーネスで確認しています。この環境では Chromium が即時終了するため、ブラウザでのスクリーンショット検証は未実施です（[MVP の制約](#-mvp-の制約)）。
+UI ランタイム（`dc-runtime.js`）は、9 画面の描画・`sc-if` / `sc-for` 展開・イベント配線・SVG 名前空間・入力フォーカス保持を Node ハーネスで確認し、さらに **Playwright + Firefox headless の実ブラウザ E2E（`tests/e2e/browser_smoke.mjs`、8 シナリオ）** を追加しました。
+
+```bash
+cd tests/e2e
+npm ci
+npx playwright install firefox
+BASE_URL=http://127.0.0.1:18017 node browser_smoke.mjs
+```
+
+> この環境では Chromium / Google Chrome が SIGTRAP で即時終了するため、ブラウザ E2E は Firefox で実行します。CI の `e2e` ジョブは使い捨て DB に seed して検証するため、実データを変更しません。
 
 ## 🚢 デプロイ
 
@@ -382,6 +425,17 @@ UI ランタイム（`dc-runtime.js`）は、9 画面の描画・`sc-if` / `sc-f
 |---|---|---|---|
 | 🛠️ systemd（ネイティブ常駐） | `18017` | http://192.168.0.185:18017/ | OS 常駐・自動起動 |
 | 🐳 Docker（コンテナ） | `28080` | http://192.168.0.185:28080/ | 隔離・再現可能なデプロイ |
+
+### 🌐 公開 URL（Cloudflare Tunnel）
+
+Mirai-DX プラットフォームの命名規則（`<app>.mirai-dx-platform.com`）に合わせ、MVP 用サブドメインを Cloudflare Tunnel で公開しています。
+
+| 用途 | URL | 状態 |
+|---|---|---|
+| 🔶 MVP／Prototype（関係者レビュー用） | `https://route-planner-mvp.mirai-dx-platform.com` | Cloudflare Tunnel（`route-planner-mvp`）→ ローカル systemd（`18017`）。TLS 終端は Cloudflare |
+| 🟦 本番（予約） | `https://route-planner.mirai-dx-platform.com` | DNS 予約済み。本番デプロイ・本番 DB・本番 Secrets は今回の対象外のため未配信 |
+
+> 本番 URL は「本番運用化は対象外」の前提で名前だけ予約しています。実配信は Phase 2 の本番リリース判断（Neon／Entra ID／Cloudflare Access 設定）後です。
 
 ### 🛠️ systemd 登録
 
@@ -436,10 +490,13 @@ docker compose exec webui alembic upgrade head
 | 🛰️ GIS/API | 外部 API アダプタ層実装済み（スタブ） | OSM、xROAD、国土数値情報、PLATEAU 等との実連携（API キー待ち） |
 | 🗄️ 永続化 | SQLAlchemy + SQLite（デフォルト）/ PostgreSQL＋PostGIS（compose・migration 済み） | Neon PostgreSQL プロビジョニング（API キー待ち） |
 | 🔐 認証認可 | OIDC/Entra ID + API キー fallback + 4 ロール RBAC 実装済み | Entra ID テナント設定（認証情報待ち） |
-| 🧾 監査 | audit_logs テーブルに永続化済み＋ admin API | 監査ログ検索・エクスポート UI |
+| 🧾 監査 | audit_logs テーブルに永続化＋ admin API＋検索・CSV エクスポート UI 実装済み | 期間指定 UI・ユーザー管理画面 |
 | 📍 ルート精度 | OSRM アダプタ実装済み（`ROUTING_PROVIDER=osrm`） | 商用 Routing API・pgRouting、規制属性反映 |
 | 🧪 評価根拠 | OSM/Overpass 実地物取得対応（`OSM_OVERPASS_ENABLED=1`） | xROAD・国土数値情報・PLATEAU 実連携、品質管理 |
-| ☁️ デプロイ | systemd + Docker + Cloudflare 設定済み | Cloudflare 実デプロイ（API Token 待ち） |
+| ☁️ デプロイ | systemd + Docker + Cloudflare Tunnel（MVP URL 公開済み） | 本番 URL への実配信（Phase 2） |
+| 📝 案件管理 | 編集（PATCH）・論理削除（DELETE）・検索・ステータスフィルタ・ページング実装済み | 経由地・回避エリア指定、複製 |
+| 📄 帳票 | Markdown / CSV / PDF / **Excel（xlsx）** 実装済み | 帳票テンプレート選択、地図画像の添付パッケージ |
+| 🧪 ブラウザ E2E | Playwright + Firefox headless で 8 シナリオ実装済み（CI 組込み） | Chromium 系（本環境は SIGTRAP のため Firefox を使用） |
 
 ## 🧭 今後の拡張
 
