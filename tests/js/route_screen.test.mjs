@@ -43,6 +43,7 @@ function loadComponent(extraGlobals = {}) {
     Boolean,
     Promise,
     setTimeout,
+    URLSearchParams,
     ...extraGlobals,
   };
   sandbox.globalThis = sandbox;
@@ -72,6 +73,16 @@ await test("_geo projects SVG coords into the demo bounding box", () => {
   const [lat, lng] = c._geo(110, 650);
   assert.ok(lat <= 35.69 && lat >= 35.63, `lat ${lat} out of box`);
   assert.ok(lng >= 139.72 && lng <= 139.8, `lng ${lng} out of box`);
+});
+
+await test("renderVals computes all screens without throwing (regression: blank UI)", () => {
+  const c = new Component();
+  for (const screen of ["dashboard", "project", "routes", "memo", "report", "admin", "knowledge", "facilities", "system"]) {
+    c.setState({ screen });
+    const vals = c.renderVals();
+    assert.ok(vals && typeof vals === "object", `renderVals must return an object for ${screen}`);
+    assert.ok(vals.nav && vals.nav.dashboard, `nav must be present for ${screen}`);
+  }
 });
 
 await test("_geo is monotonic: +y -> south (lower lat), +x -> east (higher lng)", () => {
@@ -255,7 +266,7 @@ await test("saveAndGenerate creates the project then generates and evaluates rou
         });
       }
       if (url === "/api/projects") {
-        return Promise.resolve({ ok: true, json: async () => [] });
+        return Promise.resolve({ ok: true, json: async () => ({ items: [], total: 0, limit: 10, offset: 0 }) });
       }
       return Promise.resolve({ ok: true, json: async () => ({}) });
     },
@@ -280,7 +291,7 @@ await test("submitProject posts a review request for the active project", async 
   const { Component: C } = loadComponent({
     fetch: (url, opts) => {
       if (opts && opts.method === "POST") posts.push({ url, opts });
-      if (url === "/api/projects") return Promise.resolve({ ok: true, json: async () => [] });
+      if (url === "/api/projects") return Promise.resolve({ ok: true, json: async () => ({ items: [], total: 0, limit: 10, offset: 0 }) });
       return Promise.resolve({ ok: true, json: async () => ({ status: "review_required" }) });
     },
   });
@@ -292,6 +303,123 @@ await test("submitProject posts a review request for the active project", async 
   assert.equal(post.opts.method, "POST");
   assert.equal(post.opts.headers.Authorization, "Bearer test-key-123");
   assert.ok(c.state.apiNotice.includes("レビュー依頼"), "success notice must be shown");
+});
+
+await test("fetchProjects consumes the paginated envelope and risk summary", async () => {
+  const urls = [];
+  const { Component: C } = loadComponent({
+    fetch: (url) => {
+      urls.push(url);
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          items: [
+            {
+              id: "p1", project_name: "ダミー案件A", site_name: "現場A", status: "review_required",
+              updated_at: "2026-08-14T00:00:00Z",
+              risk_summary: { candidates: 4, confirm_required: 2, data_insufficient: 1 }
+            }
+          ],
+          total: 9, limit: 10, offset: 0
+        })
+      });
+    },
+  });
+  const c = new C();
+  c.state = Object.assign({}, c.state, { projectSearch: "ダミー", projectStatus: "all", projectPage: 0, projectPageSize: 10 });
+  await c.fetchProjects();
+  assert.ok(urls[0].includes("q=%E3%83%80%E3%83%9F%E3%83%BC"), "search query must be URL-encoded into the request");
+  assert.equal(c.state.apiProjects.length, 1);
+  assert.equal(c.state.apiProjects[0].confirm, 2);
+  assert.equal(c.state.apiProjects[0].data, 1);
+  assert.equal(c.state.projectTotal, 9);
+});
+
+await test("editProject loads the selected project into the form and saveProject PATCHes it", async () => {
+  const posts = [];
+  const { Component: C } = loadComponent({
+    fetch: (url, opts) => {
+      if (url === "/api/projects/p9" && (!opts || !opts.method)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: "p9", project_name: "旧名称", site_name: "旧現場", planner: "旧担当", owner_type: "public",
+            start: { name: "旧出発", lat: 35.5, lng: 139.5 },
+            destination: { name: "旧到着", lat: 35.6, lng: 139.6 },
+            vehicle: { vehicle_type: "trailer", length_m: 12, height_m: 3.9, gross_weight_t: 40 },
+            delivery: { delivery_date: null, time_window: "daytime", night_delivery_allowed: false },
+            avoid_conditions: ["schools"], notes: "旧メモ"
+          })
+        });
+      }
+      if (opts && opts.method === "PATCH") posts.push({ url, opts });
+      if (url === "/api/projects") {
+        return Promise.resolve({ ok: true, json: async () => ({ items: [], total: 0, limit: 10, offset: 0 }) });
+      }
+      if (opts && opts.method === "PATCH" && url === "/api/projects/p9") {
+        return Promise.resolve({ ok: true, json: async () => ({ id: "p9", status: "draft" }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    },
+  });
+  const c = new C();
+  await c.editProject("p9");
+  assert.equal(c.state.editingProjectId, "p9");
+  assert.equal(c.state.projectForm.project_name, "旧名称");
+  assert.equal(c.state.vehicleType, "trailer");
+  assert.equal(c.state.avoid.school, true);
+  c.state.projectForm.project_name = "新名称";
+  await c.saveProject();
+  const patch = posts.find(p=>p.url === "/api/projects/p9");
+  assert.ok(patch, "PATCH must be issued for the edited project");
+  assert.equal(patch.opts.method, "PATCH");
+  assert.equal(JSON.parse(patch.opts.body).project_name, "新名称");
+  assert.equal(c.state.apiNotice, "案件を更新しました。");
+});
+
+await test("deleteProject issues DELETE and clears the active project", async () => {
+  const calls = [];
+  const { Component: C } = loadComponent({
+    fetch: (url, opts) => {
+      calls.push({ url, method: opts && opts.method });
+      if (url === "/api/projects/p7" && opts && opts.method === "DELETE") {
+        return Promise.resolve({ ok: true, json: async () => ({ id: "p7", status: "archived" }) });
+      }
+      if (url === "/api/projects") {
+        return Promise.resolve({ ok: true, json: async () => ({ items: [], total: 0, limit: 10, offset: 0 }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    },
+  });
+  const c = new C();
+  c.state = Object.assign({}, c.state, { activeProjectId: "p7" });
+  await c.deleteProject("p7");
+  assert.ok(calls.some(x=>x.url === "/api/projects/p7" && x.method === "DELETE"), "DELETE must be issued");
+  assert.equal(c.state.activeProjectId, null);
+  assert.ok(c.state.apiNotice.includes("保管"), "logical-delete notice must be shown");
+});
+
+await test("downloadReport requests the xlsx format and exportAuditLogs downloads CSV", async () => {
+  const urls = [];
+  const { Component: C } = loadComponent({
+    fetch: (url) => {
+      urls.push(url);
+      if (url.includes("/report")) {
+        return Promise.resolve({ ok: true, blob: async () => "PK-bytes", json: async () => ({}) });
+      }
+      if (url.includes("/audit-logs/export")) {
+        return Promise.resolve({ ok: true, blob: async () => "csv-bytes" });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    },
+  });
+  const c = new C();
+  c.state = Object.assign({}, c.state, { activeProjectId: "p3" });
+  await c.downloadReport("xlsx");
+  assert.ok(urls.some(u=>u.includes("/api/projects/p3/report?format=xlsx")), "xlsx report URL must be requested");
+  await c.exportAuditLogs();
+  assert.ok(urls.some(u=>u === "/api/admin/audit-logs/export"), "audit export URL must be requested");
+  assert.ok(c.state.apiNotice.includes("監査ログCSV"), "export success notice must be shown");
 });
 
 if (process.exitCode) {

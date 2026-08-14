@@ -1,0 +1,11 @@
+{
+  "name": "route-planner-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node browser_smoke.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.54.0"
+  }
+}

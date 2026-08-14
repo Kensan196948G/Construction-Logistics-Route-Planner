@@ -97,6 +97,57 @@ jobs:
       - name: Assert static assets are packaged
         run: python scripts/check_package_assets.py
 
+  e2e:
+    name: Browser E2E (Firefox)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "20"
+
+      - name: Install Playwright + Firefox
+        run: |
+          cd tests/e2e
+          npm ci
+          npx playwright install --with-deps firefox
+
+      - name: Run browser smoke against a seeded throwaway backend
+        shell: bash
+        env:
+          CI_E2E_DB: sqlite+aiosqlite:////tmp/route-planner-e2e.db
+        run: |
+          set -euo pipefail
+          trap 'kill "${SERVER_PID:-}" 2>/dev/null || true' EXIT
+          DATABASE_URL="$CI_E2E_DB" alembic upgrade head
+          DATABASE_URL="$CI_E2E_DB" python scripts/seed_demo.py
+          DATABASE_URL="$CI_E2E_DB" POC_ANONYMOUS_ROLE=admin \
+            uvicorn app.main:app --host 127.0.0.1 --port 8765 &
+          SERVER_PID=$!
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8765/api/health >/dev/null; then break; fi
+            sleep 1
+          done
+          cd tests/e2e
+          BASE_URL=http://127.0.0.1:8765 node browser_smoke.mjs
+
   dependency-audit:
     name: Dependency audit (advisory)
     runs-on: ubuntu-latest

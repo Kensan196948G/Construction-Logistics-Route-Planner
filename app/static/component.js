@@ -21,6 +21,12 @@ class Component extends DCLogic {
     apiLoading: false,
     apiError: '',
     apiProjects: null,
+    projectStats: null,
+    projectTotal: 0,
+    projectSearch: '',
+    projectStatus: 'all',
+    projectPage: 0,
+    projectPageSize: 10,
     apiRoutes: null,
     apiReport: null,
     apiRisksByRoute: {},
@@ -28,6 +34,11 @@ class Component extends DCLogic {
     apiNotice: '',
     apiAdminSources: null,
     apiAuditLogs: null,
+    auditLogsTotal: 0,
+    auditQuery: '',
+    editingProjectId: null,
+    apiFacilities: null,
+    meRole: null,
     projectForm: {
       project_name:'', site_name:'', planner:'', owner_type:'public',
       start_name:'', start_lat:'35.681236', start_lng:'139.767125',
@@ -43,8 +54,23 @@ class Component extends DCLogic {
     const n = parseInt(f,16);
     return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
   }
+
+  _vehicleTypeMap = {
+    normal: 'ordinary_truck',
+    large: 'heavy_truck',
+    trailer: 'trailer',
+    heavy: 'heavy_equipment_carrier',
+    special: 'other'
+  };
+  _vehicleTypeReverseMap = {
+    ordinary_truck: 'normal',
+    heavy_truck: 'large',
+    trailer: 'trailer',
+    heavy_equipment_carrier: 'heavy',
+    other: 'special'
+  };
   setScreen(k){ this.setState({ screen:k, selectedHazardId:null }); }
-  screenName(){ return this.state.screen || this.props.defaultScreen || 'dashboard'; }
+  screenName(){ return this.state.screen || (this.props && this.props.defaultScreen) || 'dashboard'; }
 
   statusMeta(s){
     const m = {
@@ -160,6 +186,15 @@ class Component extends DCLogic {
       this.setState({ apiStatus:'fail' });
     }
   }
+
+  async fetchMe(){
+    try {
+      const res = await fetch('/api/me', { headers: this._authHeaders() });
+      if(!res.ok) return;
+      const data = await res.json();
+      this.setState({ meRole: data.role || null });
+    } catch(e){ /* header shows generic PoC label */ }
+  }
   saveApi(){
     try {
       if(typeof sessionStorage!=='undefined'){
@@ -226,54 +261,100 @@ class Component extends DCLogic {
   async fetchProjects(){
     this.setState({ apiLoading:true, apiError:'' });
     try {
-      const res = await fetch('/api/projects', { headers: this._authHeaders() });
+      const params = new URLSearchParams();
+      const q = (this.state.projectSearch||'').trim();
+      if(q) params.set('q', q);
+      if(this.state.projectStatus && this.state.projectStatus !== 'all') params.set('status', this.state.projectStatus);
+      params.set('limit', String(this.state.projectPageSize||10));
+      params.set('offset', String((this.state.projectPage||0)*(this.state.projectPageSize||10)));
+      const qs = params.toString();
+      const res = await fetch('/api/projects'+(qs?'?'+qs:''), { headers: this._authHeaders() });
       if(!res.ok) throw new Error('HTTP '+res.status);
       const data = await res.json();
-      const projects = (data||[]).map(p=>({
+      const projects = (data.items||[]).map(p=>({
         id: p.id, name: p.project_name, site: p.site_name, status: p.status,
-        cands: 0, confirm: 0, data: 0,
+        cands: (p.risk_summary||{}).candidates||0,
+        confirm: (p.risk_summary||{}).confirm_required||0,
+        data: (p.risk_summary||{}).data_insufficient||0,
         updated: p.updated_at ? new Date(p.updated_at).toLocaleDateString('ja-JP',{month:'2-digit',day:'2-digit'}) : '—'
       }));
-      this.setState({ apiProjects:projects, apiOnline:true, apiLoading:false });
+      this.setState({ apiProjects:projects, projectTotal: data.total||0, apiOnline:true, apiLoading:false });
     } catch(e){
       this.setState({ apiLoading:false, apiError:'案件一覧の取得に失敗しました。デモデータを表示します。' });
     }
   }
 
-  async createProject(){
+  async fetchProjectStats(){
+    try {
+      const res = await fetch('/api/projects/stats', { headers: this._authHeaders() });
+      if(!res.ok) return;
+      const data = await res.json();
+      this.setState({ projectStats: data });
+    } catch(e){ /* dashboard falls back to page-level counts */ }
+  }
+
+  searchProjects(){
+    this.setState({ projectPage:0 }, ()=>this.fetchProjects());
+  }
+
+  setProjectStatusFilter(status){
+    this.setState({ projectStatus: status, projectPage:0 }, ()=>this.fetchProjects());
+  }
+
+  changeProjectPage(delta){
+    const page = Math.max(0, (this.state.projectPage||0)+delta);
+    this.setState({ projectPage:page }, ()=>this.fetchProjects());
+  }
+
+  _projectPayload(){
+    const f = this.state.projectForm;
+    return {
+      project_name: f.project_name, site_name: f.site_name, planner: f.planner,
+      owner_type: this.state.clientType || 'public',
+      start: { name: f.start_name, lat: parseFloat(f.start_lat), lng: parseFloat(f.start_lng) },
+      destination: { name: f.dest_name, lat: parseFloat(f.dest_lat), lng: parseFloat(f.dest_lng) },
+      vehicle: {
+        vehicle_type: this._vehicleTypeMap[this.state.vehicleType] || 'heavy_truck',
+        length_m: parseFloat(f.length_m)||null,
+        width_m: parseFloat(f.width_m)||null,
+        height_m: parseFloat(f.height_m)||null,
+        gross_weight_t: parseFloat(f.gross_weight_t)||null,
+        axle_weight_t: parseFloat(f.axle_weight_t)||null,
+        cargo_type: f.cargo_type||null,
+        special_vehicle_flag: !!f.special_vehicle
+      },
+      delivery: {
+        delivery_date: f.delivery_date || null,
+        time_window: this.state.timeWindow || 'daytime',
+        holiday: false,
+        night_delivery_allowed: this.state.nightAllowed || false
+      },
+      avoid_conditions: this._avoidPayload(),
+      notes: f.notes || null
+    };
+  }
+
+  _validateProjectForm(){
     const f = this.state.projectForm;
     if(!f.project_name||!f.site_name||!f.planner||!f.start_name||!f.dest_name){
       this.setState({ apiError:'工事件名・現場名・担当者・出発地・到着地は必須です。' });
-      return null;
+      return false;
     }
+    if(!(parseFloat(f.start_lat) >= -90 && parseFloat(f.start_lat) <= 90 && parseFloat(f.start_lng) >= -180 && parseFloat(f.start_lng) <= 180) ||
+       !(parseFloat(f.dest_lat) >= -90 && parseFloat(f.dest_lat) <= 90 && parseFloat(f.dest_lng) >= -180 && parseFloat(f.dest_lng) <= 180)){
+      this.setState({ apiError:'緯度は -90〜90、経度は -180〜180 の範囲で入力してください。' });
+      return false;
+    }
+    return true;
+  }
+
+  async createProject(){
+    if(!this._validateProjectForm()) return null;
     this.setState({ apiLoading:true, apiError:'' });
     try {
       const res = await fetch('/api/projects', {
         method:'POST', headers:Object.assign({'Content-Type':'application/json'}, this._authHeaders()),
-        body: JSON.stringify({
-          project_name: f.project_name, site_name: f.site_name, planner: f.planner,
-          owner_type: this.state.clientType || 'public',
-          start: { name: f.start_name, lat: parseFloat(f.start_lat), lng: parseFloat(f.start_lng) },
-          destination: { name: f.dest_name, lat: parseFloat(f.dest_lat), lng: parseFloat(f.dest_lng) },
-          vehicle: {
-            vehicle_type:'heavy_truck',
-            length_m: parseFloat(f.length_m)||null,
-            width_m: parseFloat(f.width_m)||null,
-            height_m: parseFloat(f.height_m)||null,
-            gross_weight_t: parseFloat(f.gross_weight_t)||null,
-            axle_weight_t: parseFloat(f.axle_weight_t)||null,
-            cargo_type: f.cargo_type||null,
-            special_vehicle_flag: !!f.special_vehicle
-          },
-          delivery: {
-            delivery_date: f.delivery_date || null,
-            time_window: this.state.timeWindow || 'daytime',
-            holiday: false,
-            night_delivery_allowed: this.state.nightAllowed || false
-          },
-          avoid_conditions: this._avoidPayload(),
-          notes: f.notes || null
-        })
+        body: JSON.stringify(this._projectPayload())
       });
       if(!res.ok) throw new Error('HTTP '+res.status);
       const created = await res.json();
@@ -284,6 +365,100 @@ class Component extends DCLogic {
       this.setState({ apiLoading:false, apiError:'案件の作成に失敗しました。' });
       return null;
     }
+  }
+
+  async saveProject(){
+    const pid = this.state.editingProjectId;
+    if(!pid){ return this.createProject(); }
+    if(!this._validateProjectForm()) return null;
+    this.setState({ apiLoading:true, apiError:'' });
+    try {
+      const res = await fetch('/api/projects/'+encodeURIComponent(pid), {
+        method:'PATCH', headers:Object.assign({'Content-Type':'application/json'}, this._authHeaders()),
+        body: JSON.stringify(this._projectPayload())
+      });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const updated = await res.json();
+      this.setState({ activeProjectId: updated.id, apiNotice:'案件を更新しました。' });
+      await this.fetchProjects();
+      return updated;
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'案件の更新に失敗しました（作成中・評価中・差戻しの案件のみ編集できます）。' });
+      return null;
+    }
+  }
+
+  async editProject(projectId, event){
+    if(event){ event.stopPropagation(); event.preventDefault(); }
+    this.setState({ apiLoading:true, apiError:'', apiNotice:'' });
+    try {
+      const res = await fetch('/api/projects/'+encodeURIComponent(projectId), { headers: this._authHeaders() });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const p = await res.json();
+      const avoidMap = { schools:'school', residential:'residential', rail_crossings:'crossing', steep_slopes:'slope' };
+      const avoid = { school:false, residential:false, narrow:false, crossing:false, slope:false };
+      (p.avoid_conditions||[]).forEach(k=>{ const key = avoidMap[k]; if(key) avoid[key] = true; });
+      this.setState({
+        editingProjectId: p.id,
+        screen: 'project',
+        clientType: p.owner_type || 'public',
+        timeWindow: (p.delivery||{}).time_window || 'daytime',
+        nightAllowed: !!(p.delivery||{}).night_delivery_allowed,
+        vehicleType: this._vehicleTypeReverseMap[(p.vehicle||{}).vehicle_type] || 'large',
+        avoid,
+        projectForm: {
+          project_name: p.project_name||'', site_name: p.site_name||'', planner: p.planner||'',
+          owner_type: p.owner_type||'public',
+          start_name: (p.start||{}).name||'', start_lat: String((p.start||{}).lat||''), start_lng: String((p.start||{}).lng||''),
+          dest_name: (p.destination||{}).name||'', dest_lat: String((p.destination||{}).lat||''), dest_lng: String((p.destination||{}).lng||''),
+          length_m: p.vehicle&&p.vehicle.length_m!=null ? String(p.vehicle.length_m) : '',
+          width_m: p.vehicle&&p.vehicle.width_m!=null ? String(p.vehicle.width_m) : '',
+          height_m: p.vehicle&&p.vehicle.height_m!=null ? String(p.vehicle.height_m) : '',
+          gross_weight_t: p.vehicle&&p.vehicle.gross_weight_t!=null ? String(p.vehicle.gross_weight_t) : '',
+          axle_weight_t: p.vehicle&&p.vehicle.axle_weight_t!=null ? String(p.vehicle.axle_weight_t) : '',
+          cargo_type: (p.vehicle||{}).cargo_type||'',
+          special_vehicle: !!(p.vehicle||{}).special_vehicle_flag,
+          delivery_date: (p.delivery||{}).delivery_date||'', notes: p.notes||'', time_window: (p.delivery||{}).time_window||'daytime'
+        }
+      });
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'案件の読み込みに失敗しました。' });
+    }
+  }
+
+  async deleteProject(projectId, event){
+    if(event){ event.stopPropagation(); event.preventDefault(); }
+    if(typeof window!=='undefined' && window.confirm && !window.confirm('この案件を保管（論理削除）します。よろしいですか？')) return;
+    this.setState({ apiLoading:true, apiError:'', apiNotice:'' });
+    try {
+      const res = await fetch('/api/projects/'+encodeURIComponent(projectId), {
+        method:'DELETE', headers: this._authHeaders()
+      });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      if(this.state.activeProjectId === projectId){
+        this.setState({ activeProjectId:null, apiRoutes:null, apiReport:null, apiRisksByRoute:{} });
+      }
+      await this.fetchProjects();
+      this.setState({ apiLoading:false, apiNotice:'案件を保管（論理削除）しました。' });
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'案件の削除に失敗しました。' });
+    }
+  }
+
+  cancelEdit(){
+    this.setState({
+      editingProjectId: null,
+      projectForm: {
+        project_name:'', site_name:'', planner:'', owner_type:'public',
+        start_name:'', start_lat:'35.681236', start_lng:'139.767125',
+        dest_name:'', dest_lat:'35.658581', dest_lng:'139.745433',
+        length_m:'12.0', width_m:'2.49', height_m:'3.8', gross_weight_t:'28.0', axle_weight_t:'10.0',
+        cargo_type:'', special_vehicle:false, delivery_date:'', notes:'', time_window:'daytime'
+      },
+      clientType:'public', timeWindow:'daytime', nightAllowed:false, vehicleType:'trailer',
+      avoid:{ school:true, residential:true, narrow:false, crossing:false, slope:false },
+      apiError:'', apiNotice:''
+    });
   }
 
   _avoidPayload(){
@@ -299,7 +474,7 @@ class Component extends DCLogic {
   }
 
   async saveAndGenerate(){
-    const created = await this.createProject();
+    const created = await this.saveProject();
     if(!created || !created.id){ this.setState({ apiLoading:false }); return; }
     await this.generateAndEvaluate(created.id);
   }
@@ -413,6 +588,11 @@ class Component extends DCLogic {
       if(format==='pdf'){
         const blob = await res.blob();
         this._downloadBlob(blob, 'route-report-'+pid+'.pdf');
+      } else if(format==='xlsx'){
+        const blob = await res.blob();
+        this._downloadBlob(blob, 'route-report-'+pid+'.xlsx');
+        this.setState({ apiLoading:false, apiNotice:'Excel帳票をダウンロードしました。' });
+        return;
       } else {
         const data = await res.json();
         const blob = new Blob([data.content||''], { type:'text/plain;charset=utf-8' });
@@ -472,14 +652,48 @@ class Component extends DCLogic {
 
   async fetchAuditLogs(){
     try {
-      const res = await fetch('/api/admin/audit-logs?limit=100', { headers: this._authHeaders() });
+      const params = new URLSearchParams({ limit:'100' });
+      const q = (this.state.auditQuery||'').trim();
+      if(q) params.set('q', q);
+      const res = await fetch('/api/admin/audit-logs?'+params.toString(), { headers: this._authHeaders() });
       if(!res.ok) return;
       const data = await res.json();
-      const logs = (data||[]).map(l=>({
+      const logs = (data.items||[]).map(l=>({
         t: l.created_at ? new Date(l.created_at).toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—',
         u: l.user_id||'—', a: l.action||'—', tg: l.target_id||'—'
       }));
-      this.setState({ apiAuditLogs: logs });
+      this.setState({ apiAuditLogs: logs, auditLogsTotal: data.total||0 });
+    } catch(e){ /* keep demo rows */ }
+  }
+
+  searchAuditLogs(){
+    this.fetchAuditLogs();
+  }
+
+  async exportAuditLogs(){
+    this.setState({ apiLoading:true, apiError:'' });
+    try {
+      const res = await fetch('/api/admin/audit-logs/export', { headers: this._authHeaders() });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const blob = await res.blob();
+      this._downloadBlob(blob, 'audit-logs.csv');
+      this.setState({ apiLoading:false, apiNotice:'監査ログCSVをダウンロードしました。' });
+    } catch(e){
+      this.setState({ apiLoading:false, apiError:'監査ログのエクスポートに失敗しました（管理者権限が必要です）。' });
+    }
+  }
+
+  async fetchFacilities(){
+    try {
+      const res = await fetch('/api/facilities', { headers: this._authHeaders() });
+      if(!res.ok) return;
+      const data = await res.json();
+      const points = (data||[]).map(k=>({
+        type: k.type||'narrow', name: k.name||'—', loc: k.registered_by||'登録者未設定',
+        rank: k.rank||'D', records: k.description||'', note: k.description||'',
+        date: k.updated_at ? new Date(k.updated_at).toLocaleDateString('ja-JP',{month:'2-digit',day:'2-digit'}) : '—'
+      }));
+      this.setState({ apiFacilities: points });
     } catch(e){ /* keep demo rows */ }
   }
 
@@ -540,6 +754,7 @@ class Component extends DCLogic {
   quickSearch(q){ this.setState({ kQuery:q }, ()=>this.runKnowledgeSearch()); }
 
   get facilityPoints(){
+    if(this.state.apiFacilities && this.state.apiFacilities.length) return this.state.apiFacilities;
     return [
       {type:'bridge', name:'△△大橋', loc:'国道○○号 12.3k', rank:'D', records:'通行実績 3件 ／ 28t 可（R02確認）', note:'重量制限標識なし。管理者台帳で耐荷重を確認済み。'},
       {type:'tunnel', name:'○○トンネル', loc:'県道△△線', rank:'A', records:'制限高 4.1m', note:'高さ4.1m標識あり。トレーラー嵩上げ時は要注意。'},
@@ -767,9 +982,11 @@ class Component extends DCLogic {
   }
 
   renderVals(){
-    const accent = this.props.accent || '#ff6a00';
+    const props = this.props || {};
+    const accent = props.accent || '#ff6a00';
     const soft = this.hexToRgba(accent, 0.14);
     const screen = this.screenName();
+    const fmt = this.state.reportFormat || 'markdown';
     const mk = (k)=>({ bg: screen===k?soft:'transparent', fg: screen===k?'#ffffff':'#99a0ab', bar: screen===k?accent:'transparent', go: ()=>this.setScreen(k) });
 
     const facCats = [
@@ -800,18 +1017,46 @@ class Component extends DCLogic {
 
     const projects = this.projects.map(p=>{
       const sm = this.statusMeta(p.status);
+      const editable = ['draft','evaluating','change_requested'].includes(p.status);
       return Object.assign({}, p, {
         sLabel:sm.label, sBg:sm.bg, sColor:sm.color, sBorder:sm.border,
         confirmColor: p.confirm>0 ? '#d9531e' : '#bdb8ad',
-        onClick: ()=>this.selectProject(p.id)
+        onClick: ()=>this.selectProject(p.id),
+        onEdit: (e)=>this.editProject(p.id, e),
+        onDelete: (e)=>this.deleteProject(p.id, e),
+        canEdit: editable,
+        cannotEdit: !editable,
+        editBtnBg: editable ? '#fff' : '#f3f1ea',
+        editBtnBorder: editable ? '#c9c4ba' : '#e0dcd3',
+        editBtnFg: editable ? '#5e646c' : '#b4b0a7'
       });
     });
     const total = projects.length;
+    const pageSize = this.state.projectPageSize||10;
+    const totalCount = this.state.projectTotal||0;
+    const pageStart = totalCount ? (this.state.projectPage||0)*pageSize+1 : 0;
+    const pageEnd = Math.min((this.state.projectPage||0)*pageSize+total, totalCount||total);
+    const pager = {
+      label: totalCount ? (pageStart+' - '+pageEnd+' / 全 '+totalCount+' 件') : ('全 '+total+' 件中 '+total+' 件'),
+      hasPrev: (this.state.projectPage||0)>0,
+      hasNext: (this.state.projectPage||0)*pageSize+total < totalCount,
+      prev: ()=>this.changeProjectPage(-1),
+      next: ()=>this.changeProjectPage(1)
+    };
+    const projectStatusFilters = [
+      {key:'all',label:'すべて'},{key:'draft',label:'作成中'},{key:'evaluating',label:'評価中'},
+      {key:'review_required',label:'追加確認中'},{key:'change_requested',label:'差戻し'},
+      {key:'reviewed',label:'確認済み'},{key:'archived',label:'保管'}
+    ].map(s=>({ key:s.key, label:s.label, on:this.state.projectStatus===s.key,
+      bg:this.state.projectStatus===s.key?'#1a1d21':'#fff', fg:this.state.projectStatus===s.key?'#fff':'#5e646c',
+      border:this.state.projectStatus===s.key?'#1a1d21':'#d4cfc4',
+      onClick:()=>this.setProjectStatusFilter(s.key) }));
+    const globalStats = this.state.projectStats;
     const stats = [
-      {label:'登録案件', value:String(total), unit:'件', note:'API から取得した案件数', color:'#2b6cb0'},
-      {label:'追加確認中', value:String(projects.filter(p=>p.status==='review_required').length), unit:'件', note:'レビュー依頼済みの案件', color:'#d9531e'},
-      {label:'評価中', value:String(projects.filter(p=>p.status==='evaluating').length), unit:'件', note:'ルート生成・評価処理中', color:'#c47a00'},
-      {label:'確認済み', value:String(projects.filter(p=>p.status==='reviewed').length), unit:'件', note:'承認済みの案件', color:'#1f8a4c'}
+      {label:'登録案件', value:String(globalStats? (Object.values(globalStats).reduce((a,b)=>a+b,0)-(globalStats.archived||0)) : (totalCount||total)), unit:'件', note:'API から取得した案件数（保管を除く）', color:'#2b6cb0'},
+      {label:'追加確認中', value:String(globalStats? (globalStats.review_required||0) : projects.filter(p=>p.status==='review_required').length), unit:'件', note:'レビュー依頼済みの案件', color:'#d9531e'},
+      {label:'評価中', value:String(globalStats? ((globalStats.evaluating||0)+(globalStats.change_requested||0)) : projects.filter(p=>p.status==='evaluating').length), unit:'件', note:'ルート生成・評価処理中（差戻し含む）', color:'#c47a00'},
+      {label:'確認済み', value:String(globalStats? (globalStats.reviewed||0) : projects.filter(p=>p.status==='reviewed').length), unit:'件', note:'承認済みの案件', color:'#1f8a4c'}
     ];
     const dataSources = this.dataSources.map(d=>{
       const ss = this.srcStatusMeta(d.status);
@@ -959,8 +1204,9 @@ class Component extends DCLogic {
     const reportCode = this.state.apiReport || (fmt==='csv'?csvText:mdText);
     const showCode = fmt==='markdown'||fmt==='csv';
     const isPdf = fmt==='pdf';
+    const isXlsx = fmt==='xlsx';
     const pidLabel = this.state.activeProjectId ? String(this.state.activeProjectId).slice(0,12) : 'NEW';
-    const reportFileName = fmt==='csv' ? 'route_comparison_'+pidLabel+'.csv' : (fmt==='pdf' ? 'route-report-'+pidLabel+'.pdf' : 'risk_memo_'+pidLabel+'.md');
+    const reportFileName = fmt==='csv' ? 'route_comparison_'+pidLabel+'.csv' : (fmt==='pdf' ? 'route-report-'+pidLabel+'.pdf' : (fmt==='xlsx' ? 'route-report-'+pidLabel+'.xlsx' : 'risk_memo_'+pidLabel+'.md'));
 
     const adminSources = this.dataSources.map(d=>{ const ss=this.srcStatusMeta(d.status); const rm=this.rankMeta(d.rank); const en=d.status!=='down'; return { name:d.name, statusLabel:ss.label, statusColor:ss.color, dotColor:ss.color, rankLabel:d.rank, rankBg:rm.bg, rankColor:rm.color, freq:d.freq, checked:d.checked, toggleBg: en?'#1f8a4c':'#cdd2d8', toggleX: en?'19px':'2px' }; });
     const evalWeights = [ {label:'橋梁・トンネル・高さ重量', w:25}, {label:'道路条件・狭隘性', w:20}, {label:'交通量・混雑', w:15}, {label:'周辺施設・近隣影響', w:15}, {label:'災害・地形リスク', w:10}, {label:'データ不足', w:10}, {label:'運用面', w:5} ].map(e=>Object.assign({}, e, {pct:(e.w/25*100)+'%'}));
@@ -972,7 +1218,11 @@ class Component extends DCLogic {
     const activeProjectName = activeProject ? activeProject.name : '案件未選択';
     const activeStatusMeta = activeProject ? this.statusMeta(activeProject.status) : this.statusMeta('draft');
     const todayLabel = new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'}) + ' ' + new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
-    const userLabel = this.state.apiKey ? 'APIキー運用者' : '未ログイン（PoC）';
+    const roleLabels = { admin:'管理者', planner:'施工計画', site_user:'現場', viewer:'閲覧' };
+    const meRole = this.state.meRole;
+    const userLabel = this.state.apiKey
+      ? ('APIキー運用者（'+(roleLabels[meRole]||meRole||'planner')+'）')
+      : (meRole ? ('PoC（'+(roleLabels[meRole]||meRole)+'）') : '未ログイン（PoC）');
     const activeProjectLabel = activeProject ? activeProject.name : '案件未選択';
     const activeProjectIdLabel = this.state.activeProjectId || '—';
 
@@ -1009,8 +1259,7 @@ class Component extends DCLogic {
     const summaryRoute = (pf.start_name || '出発地') + ' → ' + (pf.dest_name || '到着地');
     const summaryVehicle = (pf.height_m || '未入力') + 'm / ' + (pf.gross_weight_t || '未入力') + 't';
 
-    const fmt = this.state.reportFormat;
-    const reportFormats = [{key:'markdown',label:'Markdown'},{key:'csv',label:'CSV'},{key:'pdf',label:'PDF'}].map(f=>{
+    const reportFormats = [{key:'markdown',label:'Markdown'},{key:'csv',label:'CSV'},{key:'xlsx',label:'Excel'},{key:'pdf',label:'PDF'}].map(f=>{
       const on=this.state.reportFormat===f.key;
       return Object.assign({}, f, {on, onClick:()=>this.setReportFormatWithFetch(f.key),
         bg:on?'#1a1d21':'#fff', fg:on?'#fff':'#5e646c', border:on?'#1a1d21':'#d4cfc4'});
@@ -1023,8 +1272,17 @@ class Component extends DCLogic {
       isKnowledge: screen==='knowledge', isFacilities: screen==='facilities', isSystem: screen==='system',
       nav: { dashboard:mk('dashboard'), project:mk('project'), routes:mk('routes'), memo:mk('memo'), report:mk('report'), admin:mk('admin'), knowledge:mk('knowledge'), facilities:mk('facilities'), system:mk('system') },
       stats, projects, dataSources, knowledgePoints, hazardBreakdown,
+      projectSearch: this.state.projectSearch,
+      onProjectSearchInput: (e)=>this.setState({ projectSearch:e.target.value }),
+      onProjectSearchKey: (e)=>{ if(e.key==='Enter') this.searchProjects(); },
+      searchProjects: ()=>this.searchProjects(),
+      projectStatusFilters, pager,
       pidLabel, activeProjectName, activeStatusLabel: activeStatusMeta.label, todayLabel, userLabel,
-      newProject: ()=>this.setScreen('project'),
+      editingProjectId: this.state.editingProjectId,
+      isEditing: !!this.state.editingProjectId,
+      editingLabel: this.state.editingProjectId ? '（編集中）' : '',
+      newProject: ()=>{ this.cancelEdit(); this.setScreen('project'); },
+      cancelEdit: ()=>this.cancelEdit(),
       routes, active, routeRender, visibleHazards, riskList, activeBreak,
       activeScoreColor: active?active.scoreColor:'#c47a00', activeLvLabel: aLM.label, activeLvBg: aLM.bg, activeLvColor: aLM.color, activeLvBorder: aLM.border,
       layerPanel, showHazard, showRouteSummary: !showHazard, hazard,
@@ -1034,15 +1292,22 @@ class Component extends DCLogic {
       nightToggle: ()=>this.toggleNight(),
       specialToggle,
       genRoutes: ()=>this.saveAndGenerate(),
-      genRoutesLabel,
+      genRoutesLabel: this.state.editingProjectId ? '案件を更新してルート候補を生成' : genRoutesLabel,
       summaryProjectName, summaryRoute, summaryVehicle,
       saveAndGenerate: ()=>this.saveAndGenerate(),
       regenRoutes: ()=>this.regenRoutes(),
       submitProject: ()=>this.submitProject(),
       approveProject: ()=>this.approveProject(),
       refreshAdmin: ()=>{ this.fetchDataSources(); this.fetchAuditLogs(); },
+      auditQuery: this.state.auditQuery,
+      onAuditQueryInput: (e)=>this.setState({ auditQuery:e.target.value }),
+      onAuditQueryKey: (e)=>{ if(e.key==='Enter') this.searchAuditLogs(); },
+      searchAuditLogs: ()=>this.searchAuditLogs(),
+      exportAuditLogs: ()=>this.exportAuditLogs(),
+      auditLogsTotal: this.state.auditLogsTotal,
+      auditLogsNote: this.state.auditLogsTotal ? ('DB 連携（'+this.state.auditLogsTotal+' 件）') : 'デモ表示',
       checklist, checkedCount, checkTotal: checklist.length, confirmTargets, memoRoutes, memoHazards,
-      reportFormats, reportCode, showCode, showRendered: !showCode && !isPdf, isPdf, reportFileName,
+      reportFormats, reportCode, showCode, showRendered: !showCode && !isPdf && !isXlsx, isPdf, isXlsx, reportFileName,
       adminSources, evalWeights, evalRules, adminRoles, adminLogs,
       facCats, facilities, facCount: facilities.length,
       kQuery: this.state.kQuery, kSearching: this.state.kSearching, kHasResult: this.state.kHasResult, kAnswer: this.state.kAnswer, kError: this.state.kError,
@@ -1063,6 +1328,7 @@ class Component extends DCLogic {
       onRiskComment: (e)=>this.setRiskComment(e.target.value),
       submitRiskComment: ()=>this.submitRiskComment(),
       pfFields, createProject: ()=>this.createProject(),
+      saveProject: ()=>this.saveProject(),
       fetchProjects: ()=>this.fetchProjects()
     };
   }

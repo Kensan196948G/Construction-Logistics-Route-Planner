@@ -19,3 +19,5 @@ backups/
 
 # Local tool state
 .opencode/
+# E2E tooling dependencies (package-lock.json is committed for reproducibility)
+node_modules/
