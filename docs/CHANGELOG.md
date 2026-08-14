@@ -1,5 +1,14 @@
 # 変更履歴
 
+## 2026-08-14（追補）— ライトUI統一・本番ドメインの配信
+
+- サイドバーとヘッダーをダーククロームからライトテーマへ統一（全体ライトモード）。
+  Firefox E2E に computed style の回帰アサーションを追加
+- 本番ドメイン `https://route-planner.mirai-dx-platform.com` の Cloudflare Tunnel
+  （`route-planner`）を起動し、1033 エラーを解消。現状は MVP と同一の
+  サンプルモードアプリを配信（本番運用化は対象外のまま）
+- `deploy/cloudflared/*.example.yml` を追加（Tunnel 構成の再現用）
+
 ## 2026-08-14 — MVP operable sprint（CRUD・検索・Excel・E2E・デモ seed）
 
 ブランチ: `feat/mvp-crud-excel-search`

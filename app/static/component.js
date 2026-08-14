@@ -15,7 +15,7 @@ class Component extends DCLogic {
     avoid: { school:true, residential:true, narrow:false, crossing:false, slope:false },
     kQuery: '', kSearching: false, kHasResult: false, kAnswer: '', kError: '',
     facCat: 'all',
-    sys: { darkChrome:true, autoEval:true, cacheReuse:true, emailNotify:false, weeklyDigest:true, anonUsage:false },
+    sys: { darkChrome:false, autoEval:true, cacheReuse:true, emailNotify:false, weeklyDigest:true, anonUsage:false },
     apiKey: '', apiStatus: 'untested', apiSaved: false,
     apiOnline: false,
     apiLoading: false,
@@ -987,7 +987,7 @@ class Component extends DCLogic {
     const soft = this.hexToRgba(accent, 0.14);
     const screen = this.screenName();
     const fmt = this.state.reportFormat || 'markdown';
-    const mk = (k)=>({ bg: screen===k?soft:'transparent', fg: screen===k?'#ffffff':'#99a0ab', bar: screen===k?accent:'transparent', go: ()=>this.setScreen(k) });
+    const mk = (k)=>({ bg: screen===k?soft:'transparent', fg: screen===k?'#1f2329':'#5e646c', bar: screen===k?accent:'transparent', go: ()=>this.setScreen(k) });
 
     const facCats = [
       {key:'all',label:'すべて'},{key:'bridge',label:'橋梁'},{key:'tunnel',label:'トンネル'},{key:'narrow',label:'狭隘'},{key:'school',label:'学校'},{key:'hospital',label:'病院'},{key:'crossing',label:'踏切'},{key:'disaster',label:'災害'},{key:'traffic',label:'交通'}
@@ -1011,7 +1011,7 @@ class Component extends DCLogic {
     const sysToggle = (k,label,note)=>({ key:k, label, note, on:this.state.sys[k], onToggle:()=>this.toggleSys(k), trackBg:this.state.sys[k]?'#1f8a4c':'#cdd2d8', knobX:this.state.sys[k]?'19px':'2px' });
     const sysNotify = [ sysToggle('emailNotify','メール通知','要確認・評価完了時にメール送信'), sysToggle('weeklyDigest','週次ダイジェスト','担当案件の更新まとめを配信') ];
     const sysProc = [ sysToggle('autoEval','ルート生成後に自動評価','候補生成と同時にリスク評価を実行'), sysToggle('cacheReuse','公開データのキャッシュ再利用','取得済みデータを一定期間再利用') ];
-    const sysDisplay = [ sysToggle('darkChrome','ダークUIテーマ','サイドバー・ヘッダーを暗色で表示') ];
+    const sysDisplay = [ sysToggle('darkChrome','ライトUIテーマ','サイドバー・ヘッダーを含む全体をライトモードで表示') ];
     const sysSecurity = [ sysToggle('anonUsage','利用状況の匿名送信','改善のため匿名の操作統計を送信') ];
     const apiMeta = ({ untested:{label:'未テスト',color:'#7c828c',dot:'#c4bfb4'}, testing:{label:'テスト中…',color:'#2b6cb0',dot:'#2b6cb0'}, ok:{label:'接続成功',color:'#1f8a4c',dot:'#1f8a4c'}, fail:{label:'接続失敗 — キーを確認してください',color:'#c0271f',dot:'#c0271f'} })[this.state.apiStatus] || {label:'未テスト',color:'#7c828c',dot:'#c4bfb4'};
 

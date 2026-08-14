@@ -54,6 +54,16 @@ try {
     const text = await page.locator("body").innerText();
     assert.ok(text.includes("登録案件"), "dashboard KPI card must be present");
     assert.ok(text.includes("PoC（管理者）"), "the PoC identity/role must be shown in the header");
+    const asideBg = await page
+      .locator("aside")
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    const headerBg = await page
+      .locator("header")
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    assert.equal(asideBg, "rgb(255, 255, 255)", "the sidebar must use the light theme");
+    assert.equal(headerBg, "rgb(255, 255, 255)", "the header must use the light theme");
   });
 
   await test("project search filters the list via the API", async () => {

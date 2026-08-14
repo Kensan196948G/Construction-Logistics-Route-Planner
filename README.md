@@ -433,9 +433,19 @@ Mirai-DX プラットフォームの命名規則（`<app>.mirai-dx-platform.com`
 | 用途 | URL | 状態 |
 |---|---|---|
 | 🔶 MVP／Prototype（関係者レビュー用） | `https://route-planner-mvp.mirai-dx-platform.com` | Cloudflare Tunnel（`route-planner-mvp`）→ ローカル systemd（`18017`）。TLS 終端は Cloudflare |
-| 🟦 本番（予約） | `https://route-planner.mirai-dx-platform.com` | DNS 予約済み。本番デプロイ・本番 DB・本番 Secrets は今回の対象外のため未配信 |
+| 🟦 本番ドメイン（レビュー配信） | `https://route-planner.mirai-dx-platform.com` | Cloudflare Tunnel（`route-planner`）→ 同じ systemd（`18017`）。現状は MVP と同一のサンプルモードアプリを配信（本番運用化・本番データは対象外） |
 
-> 本番 URL は「本番運用化は対象外」の前提で名前だけ予約しています。実配信は Phase 2 の本番リリース判断（Neon／Entra ID／Cloudflare Access 設定）後です。
+> 本番ドメインも関係者レビュー用に配信していますが、**アプリは PoC・サンプルモードのまま**です（全画面に本番利用禁止の表示あり）。本番運用化（Neon／Entra ID／Cloudflare Access／実データ連携）は Phase 2 の本番リリース判断後です。
+
+両ホスト名の Tunnel 設定は `deploy/cloudflared/*.example.yml`、常駐は user systemd の `route-planner-cloudflared.service` と `route-planner-mvp-cloudflared.service` で行います。
+
+```bash
+# 初回セットアップ（トークンは環境変数 CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID を使用）
+cloudflared tunnel create route-planner-mvp
+cloudflared tunnel route dns route-planner-mvp route-planner-mvp.mirai-dx-platform.com
+# config を ~/.cloudflared/ に配置し、service を有効化
+systemctl --user enable --now route-planner-mvp-cloudflared.service
+```
 
 ### 🛠️ systemd 登録
 

@@ -90,6 +90,6 @@
   },
   "last_session": {
     "date": "2026-08-14",
-    "summary": "MVP operable sprint（feat/mvp-crud-excel-search）: 実ブラウザ白紙バグ（fmt TDZ）修正、案件編集・論理削除・検索/ページング、Excel帳票、監査ログ検索UI、施設辞書DB連携、冪等な架空ダミーデータseed、Playwright+Firefox実ブラウザE2E8件+CI組込み、POC_ANONYMOUS_ROLE、MVP公開URL（route-planner-mvp.mirai-dx-platform.com）を実装。pytest 59/Node 18/Firefox E2E 8、ruff/bandit/pip-audit/wheel 全合格。本番デプロイ・Neon・Entra・外部APIキー連携は対象外・ブロッカー明示。"
+    "summary": "MVP operable sprint（feat/mvp-crud-excel-search）: 実ブラウザ白紙バグ（fmt TDZ）修正、案件編集・論理削除・検索/ページング、Excel帳票、監査ログ検索UI、施設辞書DB連携、冪等な架空ダミーデータseed、Playwright+Firefox実ブラウザE2E8件+CI組込み、POC_ANONYMOUS_ROLE、MVP公開URL（route-planner-mvp.mirai-dx-platform.com）を実装。追補: サイドバー/ヘッダーをライトUIへ統一し、本番ドメイン（route-planner.mirai-dx-platform.com）のTunnelを起動して1033を解消（現状はサンプルモードMVPを配信）。pytest 59/Node 18/Firefox E2E 8（両URL）、ruff/bandit/pip-audit/wheel 全合格。本番運用化・Neon・Entra・外部APIキー連携は対象外・ブロッカー明示。"
   }
 }
