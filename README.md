@@ -447,6 +447,13 @@ cloudflared tunnel route dns route-planner-mvp route-planner-mvp.mirai-dx-platfo
 systemctl --user enable --now route-planner-mvp-cloudflared.service
 ```
 
+> **静的アセット更新時の注意（Cloudflare キャッシュ）**: 共有ゾーン
+> `mirai-dx-platform.com` には `Edge Cache TTL=2h / Browser Cache TTL=4h /
+> Cache Level=aggressive` が設定されており、origin の `Cache-Control: no-cache`
+> より優先されます。`app/static` の JS/CSS を変更したら、`index.html` 内の
+> アセット参照 `?v=YYYYMMDD-N` を必ず新しい値へ更新してください
+> （キャッシュキーが変わり、エッジから新しいファイルが配信されます）。
+
 ### 🛠️ systemd 登録
 
 user systemd service として登録済みです（`enabled` + linger 有効）。
