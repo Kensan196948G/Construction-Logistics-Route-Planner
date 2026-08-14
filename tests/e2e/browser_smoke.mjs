@@ -51,6 +51,11 @@ try {
       null,
       { timeout: 30000 }
     );
+    await page.waitForFunction(
+      () => document.body && document.body.innerText.includes("PoC（管理者）"),
+      null,
+      { timeout: 15000 }
+    );
     const text = await page.locator("body").innerText();
     assert.ok(text.includes("登録案件"), "dashboard KPI card must be present");
     assert.ok(text.includes("PoC（管理者）"), "the PoC identity/role must be shown in the header");
