@@ -112,6 +112,42 @@ class Project(ProjectCreate):
     ] = "draft"
     created_at: datetime
     updated_at: datetime
+    # Aggregate of the latest route generation, filled by list/detail reads so
+    # the dashboard can show real counts instead of hard-coded placeholders.
+    risk_summary: dict[str, int] | None = None
+
+
+class ProjectUpdate(BaseModel):
+    """Partial update payload for an editable project (draft / evaluating /
+    change_requested). All fields are optional; unset fields are left unchanged.
+    """
+
+    project_name: str | None = Field(default=None, min_length=1, max_length=200)
+    site_name: str | None = Field(default=None, min_length=1, max_length=200)
+    owner_type: str | None = Field(default=None, max_length=100)
+    planner: str | None = Field(default=None, min_length=1, max_length=100)
+    start: LocationInput | None = None
+    destination: LocationInput | None = None
+    vehicle: VehicleCondition | None = None
+    delivery: DeliveryCondition | None = None
+    avoid_conditions: list[Literal["schools", "residential", "rail_crossings", "steep_slopes"]] | None = (
+        None
+    )
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class ProjectListResponse(BaseModel):
+    items: list[Project]
+    total: int
+    limit: int
+    offset: int
+
+
+class AuditLogListResponse(BaseModel):
+    items: list[dict]
+    total: int
+    limit: int
+    offset: int
 
 
 class RouteGenerateRequest(BaseModel):
@@ -231,7 +267,7 @@ class WorkflowRequest(BaseModel):
 
 class ReportResponse(BaseModel):
     project_id: str
-    format: Literal["markdown", "csv", "pdf"]
+    format: Literal["markdown", "csv", "pdf", "xlsx"]
     content: str
     generated_at: datetime
 

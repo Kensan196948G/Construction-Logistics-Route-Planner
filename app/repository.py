@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db_models import (
     AuditLog,
+    KnowledgePoint,
 )
 from app.db_models import (
     Project as DBProject,
@@ -40,6 +41,7 @@ from app.models import (
     LocationInput,
     Project,
     ProjectCreate,
+    ProjectUpdate,
     ReportResponse,
     RiskItem,
     RouteCandidate,
@@ -328,22 +330,247 @@ async def get_project(session: AsyncSession, project_id: str) -> Project | None:
     db_project = result.scalar_one_or_none()
     if db_project is None:
         return None
-    return _db_project_to_pydantic(db_project)
+    project = _db_project_to_pydantic(db_project)
+    summaries = await _risk_summaries(session, [project.id])
+    project.risk_summary = summaries.get(
+        project.id, {"candidates": 0, "confirm_required": 0, "data_insufficient": 0}
+    )
+    return project
 
 
-async def list_projects(session: AsyncSession) -> list[Project]:
+async def list_projects(
+    session: AsyncSession,
+    *,
+    q: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[Project], int]:
     from sqlalchemy.orm import selectinload
+
+    conditions = []
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        conditions.append(
+            or_(
+                DBProject.project_name.ilike(like),
+                DBProject.site_name.ilike(like),
+                DBProject.planner.ilike(like),
+            )
+        )
+    if status:
+        conditions.append(DBProject.status == status)
+
+    count_stmt = select(func.count(DBProject.id))
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
+    total = int((await session.execute(count_stmt)).scalar_one() or 0)
 
     stmt = (
         select(DBProject)
-        .order_by(DBProject.created_at.desc())
+        .order_by(DBProject.created_at.desc(), DBProject.id.desc())
+        .offset(offset)
+        .limit(limit)
         .options(
             selectinload(DBProject.locations),
             selectinload(DBProject.vehicle_condition),
         )
     )
+    if conditions:
+        stmt = stmt.where(*conditions)
     result = await session.execute(stmt)
-    return [_db_project_to_pydantic(p) for p in result.scalars().all()]
+    projects = [_db_project_to_pydantic(p) for p in result.scalars().all()]
+    summaries = await _risk_summaries(session, [p.id for p in projects])
+    for project in projects:
+        project.risk_summary = summaries.get(
+            project.id, {"candidates": 0, "confirm_required": 0, "data_insufficient": 0}
+        )
+    return projects, total
+
+
+async def _risk_summaries(
+    session: AsyncSession, project_ids: list[str]
+) -> dict[str, dict[str, int]]:
+    """Count latest-generation candidates and open risk items per project."""
+
+    if not project_ids:
+        return {}
+    latest = (
+        select(
+            DBRouteCandidate.project_id,
+            func.max(DBRouteCandidate.generation).label("max_gen"),
+        )
+        .where(DBRouteCandidate.project_id.in_(project_ids))
+        .group_by(DBRouteCandidate.project_id)
+        .subquery()
+    )
+    stmt = (
+        select(
+            DBRouteCandidate.project_id,
+            func.count(distinct(DBRouteCandidate.id)).label("candidates"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            DBRouteRisk.risk_level == "confirm_required",
+                            DBRouteRisk.confirmation_status.in_(["", "unconfirmed", None]),
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("confirm_required"),
+            func.sum(
+                case(
+                    (DBRouteRisk.risk_level == "data_insufficient", 1),
+                    else_=0,
+                )
+            ).label("data_insufficient"),
+        )
+        .join(
+            latest,
+            and_(
+                DBRouteCandidate.project_id == latest.c.project_id,
+                DBRouteCandidate.generation == latest.c.max_gen,
+            ),
+        )
+        .outerjoin(DBRouteRisk, DBRouteRisk.route_id == DBRouteCandidate.id)
+        .group_by(DBRouteCandidate.project_id)
+    )
+    result = await session.execute(stmt)
+    summaries = {}
+    for row in result.all():
+        summaries[row.project_id] = {
+            "candidates": int(row.candidates or 0),
+            "confirm_required": int(row.confirm_required or 0),
+            "data_insufficient": int(row.data_insufficient or 0),
+        }
+    return summaries
+
+
+async def project_status_counts(session: AsyncSession) -> dict[str, int]:
+    """Global per-status counts for the dashboard KPI cards."""
+
+    stmt = select(DBProject.status, func.count(DBProject.id)).group_by(DBProject.status)
+    result = await session.execute(stmt)
+    return {str(status): int(count) for status, count in result.all()}
+
+
+async def update_project(
+    session: AsyncSession, project_id: str, payload: ProjectUpdate
+) -> Project | None:
+    from sqlalchemy.orm import selectinload
+
+    stmt = (
+        select(DBProject)
+        .where(DBProject.id == project_id)
+        .options(
+            selectinload(DBProject.locations),
+            selectinload(DBProject.vehicle_condition),
+        )
+    )
+    db_project = (await session.execute(stmt)).scalar_one_or_none()
+    if db_project is None:
+        return None
+
+    for field in ("project_name", "site_name", "owner_type", "planner", "notes"):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(db_project, field, value)
+    if payload.delivery is not None:
+        db_project.delivery_date = payload.delivery.delivery_date
+        db_project.time_window = payload.delivery.time_window
+        db_project.holiday = payload.delivery.holiday
+        db_project.night_delivery_allowed = payload.delivery.night_delivery_allowed
+    if payload.avoid_conditions is not None:
+        db_project.avoid_conditions = list(payload.avoid_conditions)
+
+    for location_type, location in (("origin", payload.start), ("destination", payload.destination)):
+        if location is None:
+            continue
+        existing = next(
+            (loc for loc in db_project.locations if loc.location_type == location_type), None
+        )
+        if existing is None:
+            db_project.locations.append(
+                DBProjectLocation(
+                    location_type=location_type,
+                    name=location.name,
+                    address=location.address,
+                    lat=location.lat,
+                    lng=location.lng,
+                    sort_order=0 if location_type == "origin" else 1,
+                )
+            )
+        else:
+            existing.name = location.name
+            existing.address = location.address
+            existing.lat = location.lat
+            existing.lng = location.lng
+
+    if payload.vehicle is not None:
+        vehicle = payload.vehicle
+        existing_vehicle = db_project.vehicle_condition
+        if existing_vehicle is None:
+            db_project.vehicle_condition = DBVehicleCondition(
+                vehicle_type=vehicle.vehicle_type,
+                length_m=vehicle.length_m,
+                width_m=vehicle.width_m,
+                height_m=vehicle.height_m,
+                gross_weight_t=vehicle.gross_weight_t,
+                axle_weight_t=vehicle.axle_weight_t,
+                cargo_type=vehicle.cargo_type,
+                special_vehicle_flag=vehicle.special_vehicle_flag,
+                notes=vehicle.notes,
+            )
+        else:
+            # Update in place: project_id is UNIQUE, so inserting a second row
+            # while the original still exists would violate the constraint.
+            existing_vehicle.vehicle_type = vehicle.vehicle_type
+            existing_vehicle.length_m = vehicle.length_m
+            existing_vehicle.width_m = vehicle.width_m
+            existing_vehicle.height_m = vehicle.height_m
+            existing_vehicle.gross_weight_t = vehicle.gross_weight_t
+            existing_vehicle.axle_weight_t = vehicle.axle_weight_t
+            existing_vehicle.cargo_type = vehicle.cargo_type
+            existing_vehicle.special_vehicle_flag = vehicle.special_vehicle_flag
+            existing_vehicle.notes = vehicle.notes
+
+    db_project.updated_at = _utcnow()
+    await session.commit()
+    summaries = await _risk_summaries(session, [project_id])
+    project = _db_project_to_pydantic(db_project)
+    project.risk_summary = summaries.get(
+        project_id, {"candidates": 0, "confirm_required": 0, "data_insufficient": 0}
+    )
+    return project
+
+
+async def archive_project(session: AsyncSession, project_id: str) -> Project | None:
+    """Logical delete: keep the audit trail, mark the project archived."""
+
+    from sqlalchemy.orm import selectinload
+
+    stmt = (
+        select(DBProject)
+        .where(DBProject.id == project_id)
+        .options(
+            selectinload(DBProject.locations),
+            selectinload(DBProject.vehicle_condition),
+        )
+    )
+    db_project = (await session.execute(stmt)).scalar_one_or_none()
+    if db_project is None:
+        return None
+    db_project.status = "archived"
+    db_project.updated_at = _utcnow()
+    await session.commit()
+    summaries = await _risk_summaries(session, [project_id])
+    project = _db_project_to_pydantic(db_project)
+    project.risk_summary = summaries.get(
+        project_id, {"candidates": 0, "confirm_required": 0, "data_insufficient": 0}
+    )
+    return project
 
 
 async def update_project_status(session: AsyncSession, project_id: str, status: str) -> None:
@@ -579,8 +806,38 @@ async def confirm_route_risk(
     }
 
 
-async def list_audit_logs(session: AsyncSession, limit: int = 100) -> list[dict]:
-    stmt = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+async def list_audit_logs(
+    session: AsyncSession,
+    *,
+    q: str | None = None,
+    action: str | None = None,
+    user_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    conditions = []
+    if action:
+        conditions.append(AuditLog.action == action)
+    if user_id:
+        conditions.append(AuditLog.user_id.ilike(f"%{user_id.strip()}%"))
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        conditions.append(
+            or_(
+                AuditLog.user_id.ilike(like),
+                AuditLog.action.ilike(like),
+                AuditLog.target_id.ilike(like),
+                AuditLog.target_type.ilike(like),
+            )
+        )
+    count_stmt = select(func.count(AuditLog.id))
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
+    total = int((await session.execute(count_stmt)).scalar_one() or 0)
+
+    stmt = select(AuditLog).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
+    if conditions:
+        stmt = stmt.where(*conditions)
     result = await session.execute(stmt)
     logs = []
     for log in result.scalars().all():
@@ -599,7 +856,28 @@ async def list_audit_logs(session: AsyncSession, limit: int = 100) -> list[dict]
                 "created_at": log.created_at,
             }
         )
-    return logs
+    return logs, total
+
+
+async def list_knowledge_points(session: AsyncSession) -> list[dict]:
+    """Expose the durable facilities dictionary (used by the 周辺施設辞書 screen)."""
+
+    stmt = select(KnowledgePoint).order_by(KnowledgePoint.point_type, KnowledgePoint.name)
+    result = await session.execute(stmt)
+    points = []
+    for point in result.scalars().all():
+        points.append(
+            {
+                "id": point.id,
+                "type": point.point_type,
+                "name": point.name,
+                "description": point.description,
+                "rank": point.reliability_rank,
+                "registered_by": point.registered_by,
+                "updated_at": point.updated_at,
+            }
+        )
+    return points
 
 
 async def save_report(

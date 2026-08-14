@@ -22,6 +22,7 @@ from app.knowledge import search_knowledge
 from app.models import (
     DISCLAIMER,
     SAMPLE_DATA_NOTICE,
+    AuditLogListResponse,
     EvaluationRequest,
     EvaluationResponse,
     KnowledgeSearchRequest,
@@ -29,6 +30,8 @@ from app.models import (
     LocationInput,
     Project,
     ProjectCreate,
+    ProjectListResponse,
+    ProjectUpdate,
     ReportResponse,
     RiskConfirmRequest,
     RiskConfirmResponse,
@@ -39,8 +42,15 @@ from app.models import (
     WorkflowRequest,
     now_utc,
 )
-from app.reporting import _csv_safe, render_csv, render_markdown, render_pdf
+from app.reporting import (
+    _csv_safe,
+    render_csv,
+    render_markdown,
+    render_pdf,
+    render_xlsx,
+)
 from app.repository import (
+    archive_project,
     confirm_route_risk,
     create_audit_log,
     create_project,
@@ -49,9 +59,12 @@ from app.repository import (
     get_project_routes,
     get_route,
     list_audit_logs,
+    list_knowledge_points,
     list_projects,
+    project_status_counts,
     save_report,
     save_routes,
+    update_project,
     update_project_status,
     update_route,
 )
@@ -170,8 +183,26 @@ def api_me(user: Annotated[UserInfo, Depends(get_current_user)]) -> UserInfo:
 
 
 @app.get("/api/projects", dependencies=[AuthenticatedUser])
-async def api_list_projects(session: DbSession) -> list[Project]:
-    return await list_projects(session)
+async def api_list_projects(
+    session: DbSession,
+    q: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> ProjectListResponse:
+    items, total = await list_projects(
+        session,
+        q=q,
+        status=status,
+        limit=min(max(limit, 1), 200),
+        offset=max(offset, 0),
+    )
+    return ProjectListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
+@app.get("/api/projects/stats", dependencies=[AuthenticatedUser])
+async def api_project_stats(session: DbSession) -> dict[str, int]:
+    return await project_status_counts(session)
 
 
 @app.post("/api/projects", status_code=status.HTTP_201_CREATED, dependencies=[PlannerRole])
@@ -196,6 +227,40 @@ async def api_create_project(
 @app.get("/api/projects/{project_id}", dependencies=[AuthenticatedUser])
 async def api_get_project(project_id: str, session: DbSession) -> Project:
     return await _require_project(project_id, session)
+
+
+@app.patch("/api/projects/{project_id}", dependencies=[PlannerRole])
+async def api_update_project(
+    project_id: str,
+    payload: ProjectUpdate,
+    request: Request,
+    session: DbSession,
+) -> Project:
+    project = await _require_project(project_id, session)
+    if project.status not in {"draft", "evaluating", "change_requested"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Only draft, evaluating, or change_requested projects can be edited.",
+        )
+    updated = await update_project(session, project_id, payload)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    await _audit(session, "project_updated", project_id, request)
+    return updated
+
+
+@app.delete("/api/projects/{project_id}", dependencies=[PlannerRole])
+async def api_archive_project(
+    project_id: str,
+    request: Request,
+    session: DbSession,
+) -> Project:
+    await _require_project(project_id, session)
+    archived = await archive_project(session, project_id)
+    if archived is None:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    await _audit(session, "project_archived", project_id, request)
+    return archived
 
 
 @app.post("/api/projects/{project_id}/routes/generate", dependencies=[PlannerRole])
@@ -368,7 +433,7 @@ async def api_list_route_risks(route_id: str, session: DbSession):
 async def api_project_report(
     project_id: str,
     session: DbSession,
-    format: Literal["markdown", "csv", "pdf"] = "markdown",
+    format: Literal["markdown", "csv", "pdf", "xlsx"] = "markdown",
 ):
     project = await _require_project(project_id, session)
     routes = await get_project_routes(session, project_id)
@@ -392,6 +457,20 @@ async def api_project_report(
                 "Content-Disposition": f'attachment; filename="route-report-{project_id}.pdf"',
             },
         )
+    if format == "xlsx":
+        xlsx_bytes = render_xlsx(project, routes)
+        await save_report(
+            session,
+            project_id,
+            ReportResponse(project_id=project_id, format="xlsx", content="Excel (binary)", generated_at=now_utc()),
+        )
+        return Response(
+            content=xlsx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="route-report-{project_id}.xlsx"',
+            },
+        )
     content = render_markdown(project, routes) if format == "markdown" else render_csv(project, routes)
     report_response = ReportResponse(project_id=project_id, format=format, content=content, generated_at=now_utc())
     await save_report(session, project_id, report_response)
@@ -399,15 +478,30 @@ async def api_project_report(
 
 
 @app.get("/api/admin/audit-logs", dependencies=[AdminRole])
-async def api_audit_logs(session: DbSession, limit: int = 100) -> list[dict]:
-    return await list_audit_logs(session, limit=min(max(limit, 1), 500))
+async def api_audit_logs(
+    session: DbSession,
+    q: str | None = None,
+    action: str | None = None,
+    user_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> AuditLogListResponse:
+    items, total = await list_audit_logs(
+        session,
+        q=q,
+        action=action,
+        user_id=user_id,
+        limit=min(max(limit, 1), 500),
+        offset=max(offset, 0),
+    )
+    return AuditLogListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
 @app.get("/api/admin/audit-logs/export", dependencies=[AdminRole])
 async def api_audit_logs_export(session: DbSession, limit: int = 500) -> Response:
     """Admin-only CSV export of the durable audit trail."""
 
-    logs = await list_audit_logs(session, limit=min(max(limit, 1), 5000))
+    logs, _ = await list_audit_logs(session, limit=min(max(limit, 1), 5000))
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(
@@ -446,6 +540,13 @@ async def api_audit_logs_export(session: DbSession, limit: int = 500) -> Respons
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="audit-logs.csv"'},
     )
+
+
+@app.get("/api/facilities", dependencies=[AuthenticatedUser])
+async def api_facilities(session: DbSession) -> list[dict]:
+    """Durable facilities dictionary (seeded with fictional demo points)."""
+
+    return await list_knowledge_points(session)
 
 
 @app.get("/api/admin/data-sources", dependencies=[AuthenticatedUser])
