@@ -1,0 +1,14 @@
+# Construction Logistics Route Planner MVP Cloudflare Tunnel config (example).
+# Copy to ~/.cloudflared/route-planner-mvp-config.yml and fill the tunnel id
+# and credentials path from `cloudflared tunnel create route-planner-mvp`.
+tunnel: <TUNNEL_ID>
+credentials-file: /home/<USER>/.cloudflared/<TUNNEL_ID>.json
+
+originRequest:
+  connectTimeout: 30s
+  noHappyEyeballs: false
+
+ingress:
+  - hostname: route-planner-mvp.mirai-dx-platform.com
+    service: http://localhost:18017
+  - service: http_status:404

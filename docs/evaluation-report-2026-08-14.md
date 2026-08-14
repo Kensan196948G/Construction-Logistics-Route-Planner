@@ -95,7 +95,9 @@
 ## 5. 公開 URL（Cloudflare）
 
 - MVP/Prototype: `https://route-planner-mvp.mirai-dx-platform.com`（Cloudflare Tunnel `route-planner-mvp` → ローカル systemd `18017`。TLS は Cloudflare で終端）。
-- 本番（予約）: `https://route-planner.mirai-dx-platform.com`（DNS 予約のみ。本番デプロイは対象外のため未配信）。
+- 本番ドメイン（レビュー配信）: `https://route-planner.mirai-dx-platform.com`（Cloudflare Tunnel `route-planner` → 同じ systemd `18017`）。現状は MVP と同一のサンプルモードアプリを配信しており、本番運用化・本番データは対象外。
+
+追補（同日）: サイドバー・ヘッダーをライトテーマへ統一し、Firefox E2E に computed style の回帰アサーションを追加。両 URL で E2E 8 シナリオが全通過することを確認。
 
 ## 6. 残バックログ（P1 以下・本番対象外を除く）
 
