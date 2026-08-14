@@ -1,10 +1,15 @@
 # Release Readiness
 
-Date: 2026-08-12
+Date: 2026-08-14
 
 ## Decision
 
-Release Ready for internal MVP evaluation.
+Release Ready for internal MVP evaluation. The 2026-08-14 sprint
+(`feat/mvp-crud-excel-search`) added project edit/logical-delete, list search &
+pagination, Excel (xlsx) reports, audit-log search UI, a DB-backed facilities
+dictionary, an idempotent fictional demo-data seed, real-browser E2E
+(Playwright + Firefox, CI-integrated), and the MVP preview URL
+`https://route-planner-mvp.mirai-dx-platform.com` (Cloudflare Tunnel).
 
 Production Ready is **partially approved**: persistent storage (SQLAlchemy + SQLite/PostgreSQL), enterprise authentication (OIDC/Entra ID + API key fallback), durable audit logging, and external API adapter layer are now implemented. Remaining blockers for production: real external API keys (xROAD, PLATEAU, KSI), Cloudflare deployment (token pending), Neon provisioning (API key pending), and Entra ID tenant configuration.
 
@@ -90,7 +95,10 @@ plus dashboard/admin real-data views and API-key bearer support.
 - OSRM/Overpass public servers are for low-volume evaluation only; production must self-host or use a commercial routing/GIS API.
 - The knowledge search is a deterministic, rule-based responder, not a live LLM.
 - Playwright screenshot validation not available in this environment (SIGTRAP).
-- Excel output, real xROAD/KSJ/PLATEAU integration, and browser-level E2E remain Phase 2+ items.
+- Real xROAD/KSJ/PLATEAU integration remains a Phase 2 item (adapter layer ready,
+  API keys/contracts pending).
+- Browser E2E runs on Firefox headless: Chromium/Chrome crash immediately
+  (SIGTRAP) in the development environment.
 
 ## Release Guard
 

@@ -5,7 +5,7 @@
     "release_deadline": "2026-12-19",
     "phase_mode": "development"
   },
-  "goal": "DB永続化・認証・外部APIアダプタ・Cloudflare基盤・WebUI強化・運用文書を実装し、本番デプロイ直前の状態まで完成させる",
+  "goal": "主要ユースケースを実操作・評価できるMVP/Prototypeを完成させ、MVP用公開URL・ダミーデータ・テスト/CI・文書整合を揃える（本番運用化は対象外）",
   "phase": "Verify",
   "kpi": {
     "success_rate_target": 0.9,
@@ -25,6 +25,16 @@
     "self_evolution": true
   },
   "completed_issues": [
+    "実ブラウザで全画面が白紙になる既存バグ（renderVals の fmt TDZ）を修正し、Firefox E2E＋回帰テストで恒久検証",
+    "案件編集（PATCH）・論理削除（DELETE→archived）・一覧の検索/ステータスフィルタ/ページング（q/status/limit/offset）",
+    "案件一覧のリスクサマリ（最新世代の候補/要確認/データ不足）と /api/projects/stats（KPI）",
+    "Excel 帳票（format=xlsx、openpyxl、4シート、数式インジェクション中和）",
+    "監査ログの q/action/user_id/offset フィルタと管理画面の検索・CSVエクスポートUI",
+    "周辺施設辞書の DB 連携（GET /api/facilities、読取り専用）",
+    "再生成可能な架空ダミーデータ seed（scripts/seed_demo.py、冪等・参照整合性・seed- 接頭辞）",
+    "Playwright + Firefox headless の実ブラウザE2E 8シナリオと CI e2e ジョブ（Chromium は SIGTRAP のため不使用）",
+    "PoC 限定 POC_ANONYMOUS_ROLE（デモ用 admin 切替。本番フェイルクローズ不変）",
+    "MVP公開URL: https://route-planner-mvp.mirai-dx-platform.com（Cloudflare Tunnel）。本番URLは予約のみ",
     "Production-readiness evaluation (18 categories, before/after) + competitor comparison + replacement-rate analysis",
     "Fail-closed production auth, timing-safe API key compare, Entra JWKS TTL/refresh",
     "Security headers/CSP, knowledge-search rate limit, CSV formula-injection protection",
@@ -37,15 +47,15 @@
     "Evaluation report, improvement ledger, test evidence, roadmap, CHANGELOG updates"
   ],
   "blocked_issues": [
-    "Cloudflare deployment: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID pending (#21)",
-    "Neon PostgreSQL provisioning: Neon API key pending (#19)",
+    "Cloudflare production deployment: MVP Tunnel 公開済み。本番URLへの実配信は本番デプロイ対象外のため未実施 (#21)",
+    "Neon PostgreSQL provisioning: Neon API キーにプロジェクトなし（読取り確認済み）。プロビジョニングは本番対象外 (#19)",
     "Entra ID tenant configuration: ENTRA_TENANT_ID + ENTRA_CLIENT_ID pending (#20)",
     "External API keys: xROAD, PLATEAU, KSI pending (#24)",
-    "Browser E2E environment: Chromium SIGTRAP locally, Playwright in CI pending (#22)"
+    "Chromium E2E: 本環境は SIGTRAP のため Firefox で代替実装・CI 化済み (#22)"
   ],
   "learning": {
     "failure_patterns": [
-      "Chromium exits immediately (SIGTRAP) in this environment; use jsdom harness for UI runtime verification instead of Playwright screenshots.",
+    "Chromium exits immediately (SIGTRAP) in this environment; use Playwright Firefox headless for real-browser E2E instead.",
       "SQLAlchemy async session with expire_on_commit=False: avoid refresh() after commit; access relationships before returning from session scope.",
       "SQLite does not support JSONB type; use JSON type for cross-dialect compatibility."
     ],
@@ -57,23 +67,29 @@
     ]
   },
   "validation": {
-    "pytest": "49 passed (Python)",
+    "pytest": "59 passed (Python)",
     "ruff": "passed",
     "compileall": "passed",
     "bandit": "passed (0 issues)",
     "wheel_build": "passed",
     "asset_check": "passed (all static assets packaged)",
     "node_syntax": "passed (3 files)",
-    "node_tests": "13 passed",
+    "node_tests": "18 passed",
+    "browser_e2e": "8 passed (Playwright Firefox headless)",
     "security_headers": "passed (CSP/headers on all responses)",
     "rate_limit": "passed (knowledge 30/min/IP -> 429)",
     "csv_formula_injection": "passed (neutralized)",
+    "xlsx_report": "passed (openpyxl 4 sheets, formula injection neutralized)",
+    "project_crud_search": "passed (PATCH / DELETE / q / status / pagination / risk_summary)",
+    "audit_filter_export": "passed (q / action / user_id + CSV export)",
+    "facilities_db": "passed (GET /api/facilities)",
+    "demo_seed_idempotent": "passed (2 runs identical, FK check clean)",
     "production_fail_closed": "passed (503 without auth config)",
     "re_eval_confirmation_carryover": "passed",
     "route_generation_versioning": "passed (latest generation only)"
   },
   "last_session": {
-    "date": "2026-08-12",
-    "summary": "本番運用水準の総合評価と改善: 認証フェイルクローズ（PRODUCTION_MODE）、タイミングセーフなAPIキー比較、Entra JWKS TTL+再取得、セキュリティヘッダー・CSP、ナレッジ検索レートリミット、CSV数式インジェクション対策、リスク確認ステータスの再評価引き継ぎ、ルート世代管理（重複防止）、搬入/回避条件のDB永続化、owner_user_id記録、監査ログCSVエクスポート、DB健全性のhealth反映、include_sourcesの評価フィルタ実装・サンプル地物の品質ランクE化、UIの提出/承認/ダウンロード/APIキー実動作を実装。pytest 49件+Node 13件成功、実サーバースモーク成功。xROAD/KSJ/PLATEAU実連携・Excel・実ブラウザE2E・Entra IDテナント設定は次フェーズ。"
+    "date": "2026-08-14",
+    "summary": "MVP operable sprint（feat/mvp-crud-excel-search）: 実ブラウザ白紙バグ（fmt TDZ）修正、案件編集・論理削除・検索/ページング、Excel帳票、監査ログ検索UI、施設辞書DB連携、冪等な架空ダミーデータseed、Playwright+Firefox実ブラウザE2E8件+CI組込み、POC_ANONYMOUS_ROLE、MVP公開URL（route-planner-mvp.mirai-dx-platform.com）を実装。pytest 59/Node 18/Firefox E2E 8、ruff/bandit/pip-audit/wheel 全合格。本番デプロイ・Neon・Entra・外部APIキー連携は対象外・ブロッカー明示。"
   }
 }

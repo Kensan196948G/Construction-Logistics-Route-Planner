@@ -1,5 +1,35 @@
 # 変更履歴
 
+## 2026-08-14 — MVP operable sprint（CRUD・検索・Excel・E2E・デモ seed）
+
+ブランチ: `feat/mvp-crud-excel-search`
+
+### 修正・改善
+- 案件管理: `PATCH /api/projects/{id}`（draft / evaluating / change_requested のみ）と
+  `DELETE /api/projects/{id}`（論理削除＝`archived`。履歴・ルート・監査ログは保持）
+- 一覧・検索: `GET /api/projects` を `{items,total,limit,offset}` 形式に拡張
+  （`q` / `status` フィルタ）、`GET /api/projects/stats`、案件ごとの
+  `risk_summary`（最新世代の候補/要確認/データ不足件数）
+- Excel 帳票: `format=xlsx`（概要・ルート比較・注意箇所・免責の4シート、
+  openpyxl、数式インジェクション中和）
+- 監査: `GET /api/admin/audit-logs` に `q` / `action` / `user_id` / `offset` を追加。
+  管理画面に検索・CSV エクスポート UI
+- 施設辞書: `GET /api/facilities`（`knowledge_points` 読取り専用）を追加し、
+  周辺施設辞書画面を DB 連携に変更
+- ダミーデータ: `scripts/seed_demo.py`（冪等・`seed-` プレフィックス）。
+  架空ユーザー4名・案件8件・ルート32候補・リスク140件・帳票・データソース5件・
+  施設辞書8件・監査ログを参照整合性付きで投入
+- UI: ダッシュボードの検索/フィルタ/ページング/編集/保管、Excel ダウンロード、
+  監査ログ検索 UI、PoC ロール表示、編集モード、案件画面の成功通知表示。
+  既存の `fmt` TDZ バグ（実ブラウザで全画面が白紙になる）を修正
+- E2E: Playwright + Firefox headless の実ブラウザテスト8シナリオ
+  （`tests/e2e/browser_smoke.mjs`）と CI `e2e` ジョブ。Chromium は本環境で
+  SIGTRAP のため Firefox を使用
+- 認証: PoC 限定の `POC_ANONYMOUS_ROLE`（既定 `planner`）を追加。
+  本番フェイルクローズは不変
+- テスト: Python 59 / Node 18 / ブラウザ 8。ruff・bandit・compileall・wheel・
+  pip-audit すべて合格
+
 ## 2026-08-12 — 総合評価対応（改善スプリント）
 
 ブランチ: `improve/production-readiness-eval`
