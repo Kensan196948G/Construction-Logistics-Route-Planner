@@ -116,6 +116,19 @@ async def test_security_headers_are_present(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_static_assets_are_not_edge_cached(client: AsyncClient) -> None:
+    """Cloudflare may serve a stale component.js otherwise; force revalidation."""
+
+    page = await client.get("/")
+    assert page.status_code == 200
+    assert page.headers["cache-control"] == "no-cache"
+
+    asset = await client.get("/assets/styles.css")
+    assert asset.status_code == 200
+    assert asset.headers["cache-control"] == "no-cache"
+
+
+@pytest.mark.asyncio
 async def test_production_mode_blocks_unauthenticated_write(client: AsyncClient, monkeypatch) -> None:
     monkeypatch.setenv("PRODUCTION_MODE", "1")
     monkeypatch.delenv("APP_API_KEY", raising=False)
