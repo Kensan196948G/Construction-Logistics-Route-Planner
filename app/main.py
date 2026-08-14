@@ -116,6 +116,12 @@ async def security_headers_and_limits(request: Request, call_next):
                 content={"detail": "検索リクエストが集中しています。少し待ってから再試行してください。"},
             )
     response = await call_next(request)
+    if request.url.path.startswith("/assets/") or request.url.path in {"", "/"}:
+        # Static assets change on every deployment. Without an explicit policy
+        # Cloudflare's edge may serve a stale copy (default extension-based
+        # cache TTL), which previously shipped an old component.js and broke
+        # the freshly deployed UI. no-cache keeps revalidation cheap.
+        response.headers.setdefault("Cache-Control", "no-cache")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
